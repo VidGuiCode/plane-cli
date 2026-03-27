@@ -1,5 +1,4 @@
 node_modules/
-dist/
 coverage/
 .DS_Store
 Thumbs.db
@@ -13,4 +12,3 @@ context/
 .obsidian/
 # !context/.gitkeep
 # !context/README.md
-

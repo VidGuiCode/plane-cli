@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.2
+
+- Fixed GitHub installs by shipping the built `dist/` output in the repository
+- Removed the install-time `prepare` build hook that was failing during `npm install -g github:...`
+- Included the CI workflow fix for `setup-node` cache configuration in a repo without `package-lock.json`
+
 ## 0.1.1
 
 - Added `plane comment list <issue>` so comments can be discovered and deleted from the CLI

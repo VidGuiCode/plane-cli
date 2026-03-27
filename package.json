@@ -1,6 +1,6 @@
 {
   "name": "plane-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Unofficial CLI for Plane",
   "license": "MIT",
   "private": false,
@@ -20,7 +20,6 @@
     "build": "tsc -p tsconfig.json",
     "clean": "powershell -NoProfile -Command \"if (Test-Path dist) { Remove-Item -Recurse -Force dist }\"",
     "dev": "bun src/cli.ts",
-    "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

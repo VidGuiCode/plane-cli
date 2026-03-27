@@ -1,0 +1,41 @@
+{
+  "name": "plane-cli",
+  "version": "0.1.0",
+  "description": "Unofficial CLI for Plane",
+  "license": "MIT",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "plane": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "powershell -NoProfile -Command \"if (Test-Path dist) { Remove-Item -Recurse -Force dist }\"",
+    "dev": "bun src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "plane",
+    "cli",
+    "project-management",
+    "api"
+  ],
+  "dependencies": {
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
+

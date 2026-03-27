@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+.idea/
+.vscode/
+.claude/
+context/
+.obsidian/
+# !context/.gitkeep
+# !context/README.md
+

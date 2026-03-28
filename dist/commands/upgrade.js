@@ -43,15 +43,15 @@ export function createUpgradeCommand() {
             printInfo("Already on the latest version.");
             return;
         }
-        const installCmd = `github:VidGuiCode/plane-cli#v${latest}`;
-        printInfo(`Upgrading...    npm install -g ${installCmd}`);
+        const tarballUrl = `https://github.com/VidGuiCode/plane-cli/releases/download/v${latest}/plane-cli-${latest}.tgz`;
+        printInfo(`Upgrading...    npm install -g ${tarballUrl}`);
         console.log("");
-        const result = spawnSync("npm", ["install", "-g", installCmd], {
+        const result = spawnSync("npm", ["install", "-g", tarballUrl], {
             stdio: "inherit",
             shell: true,
         });
         if (result.status !== 0) {
-            printError(`Upgrade failed. Try running manually: npm install -g ${installCmd}`);
+            printError(`Upgrade failed. Try running manually: npm install -g ${tarballUrl}`);
             process.exit(1);
         }
         console.log("");

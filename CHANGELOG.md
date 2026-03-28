@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- Fix install on Windows: switch to GitHub release tarballs (`npm install -g https://github.com/.../releases/download/v{x}/plane-cli-{x}.tgz`); npm installs HTTPS tarballs as real directories — no junctions, no broken paths
+- `plane upgrade` now installs from the GitHub release tarball for the same reason
+
 ## 0.1.5
 
 - Fix GitHub install on Windows: npm creates a broken directory junction (not a real copy) for git dependencies that have no `prepare` script; adding a no-op `prepare` script forces npm to do a full pack-and-install, producing a real directory

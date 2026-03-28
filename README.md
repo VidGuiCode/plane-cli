@@ -37,7 +37,7 @@ The web app is the right choice for visual workflows. `plane-cli` is optimized f
 Requires Node.js 20+.
 
 ```bash
-npm install -g github:VidGuiCode/plane-cli#v0.1.5
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.1.6/plane-cli-0.1.6.tgz
 ```
 
 Works on Windows, Linux, and Mac.

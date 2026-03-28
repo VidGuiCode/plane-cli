@@ -1,5 +1,10 @@
 import { Command } from "commander";
-import { loadConfig, saveConfig, requireActiveAccount, createClient } from "../core/config-store.js";
+import {
+  loadConfig,
+  saveConfig,
+  requireActiveAccount,
+  createClient,
+} from "../core/config-store.js";
 import { unwrap } from "../core/api-client.js";
 import { printInfo, printTable, printJson } from "../core/output.js";
 import type { PlaneWorkspace } from "../core/types.js";
@@ -22,7 +27,10 @@ export function createWorkspaceCommand(): Command {
         const res = await client.get<unknown>("workspaces/");
         const workspaces = unwrap<PlaneWorkspace>(res);
         if (workspaces.length > 0) {
-          if (opts.json) { printJson(workspaces); return; }
+          if (opts.json) {
+            printJson(workspaces);
+            return;
+          }
           const rows = workspaces.map((w) => [
             w.slug === config.context.activeWorkspace ? `* ${w.slug}` : `  ${w.slug}`,
             w.name,
@@ -34,9 +42,7 @@ export function createWorkspaceCommand(): Command {
         // Endpoint not available on this instance — show from saved accounts
       }
 
-      const slugs = config.profiles
-        .map((p) => p.defaultWorkspace)
-        .filter((s): s is string => !!s);
+      const slugs = config.profiles.map((p) => p.defaultWorkspace).filter((s): s is string => !!s);
       const unique = [...new Set(slugs)];
 
       if (unique.length === 0) {
@@ -44,7 +50,10 @@ export function createWorkspaceCommand(): Command {
         return;
       }
 
-      if (opts.json) { printJson(unique.map((slug) => ({ slug }))); return; }
+      if (opts.json) {
+        printJson(unique.map((slug) => ({ slug })));
+        return;
+      }
 
       const rows = unique.map((slug) => [
         slug === config.context.activeWorkspace ? `* ${slug}` : `  ${slug}`,

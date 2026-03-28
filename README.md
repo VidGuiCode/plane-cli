@@ -37,7 +37,7 @@ The web app is the right choice for visual workflows. `plane-cli` is optimized f
 Requires Node.js 20+.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.1.6/plane-cli-0.1.6.tgz
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.1.7/plane-cli-0.1.7.tgz
 ```
 
 Works on Windows, Linux, and Mac.
@@ -61,6 +61,7 @@ plane issue create             # create a new issue interactively
 
 ```bash
 plane login                          # connect to a Plane instance (interactive or --url/--token flags)
+plane completion <shell>             # generate shell completion script (bash, zsh, or fish)
 plane logout                         # disconnect the active account
 ```
 
@@ -110,6 +111,7 @@ plane issue update <ref>             # update an existing issue
 plane issue delete <ref>             # delete an issue
 plane issue close <ref>              # move to the first completed state
 plane issue reopen <ref>             # move back to the first backlog/unstarted state
+plane issue open <ref>               # open an issue in the default browser
 ```
 
 Issue refs are flexible: `42` (active project), `PROJ-42` (any project), or a full UUID.
@@ -125,6 +127,8 @@ plane cycle list                     # list cycles in the active project
 plane cycle issues <cycle>           # list issues in a cycle (name or UUID)
 plane cycle add <issue> <cycle>      # add an issue to a cycle
 plane cycle remove <issue> <cycle>   # remove an issue from a cycle
+plane cycle create <name>            # create a new cycle
+plane cycle delete <cycle>           # delete a cycle by name or UUID
 ```
 
 ### Modules
@@ -134,6 +138,8 @@ plane module list                    # list modules in the active project
 plane module issues <module>         # list issues in a module (name or UUID)
 plane module add <issue> <module>    # add an issue to a module
 plane module remove <issue> <module> # remove an issue from a module
+plane module create <name>           # create a new module
+plane module delete <module>         # delete a module by name or UUID
 ```
 
 ### Labels
@@ -144,6 +150,7 @@ plane label create <name> <color>    # create a label (color: hex e.g. #ff0000)
 plane label delete <label>           # delete a label by name or UUID
 plane label add <issue> <label>      # add a label to an issue
 plane label remove <issue> <label>   # remove a label from an issue
+plane label update <label>           # update a label (--name, --color)
 ```
 
 ### Comments
@@ -151,6 +158,7 @@ plane label remove <issue> <label>   # remove a label from an issue
 ```bash
 plane comment list <issue>           # list comments with IDs for an issue
 plane comment add <issue>            # add a comment (interactive or --message)
+plane comment update <id> <issue>    # update a comment (--message)
 plane comment delete <id> <issue>    # delete a comment by UUID
 ```
 
@@ -159,6 +167,9 @@ plane comment delete <id> <issue>    # delete a comment by UUID
 ```bash
 plane page list                      # list pages in the active project
 plane page get <id>                  # show a page's content
+plane page create <name>             # create a new page
+plane page update <id>               # update an existing page
+plane page delete <id>               # delete a page by UUID
 ```
 
 ### States
@@ -206,7 +217,8 @@ plane issue list
 | `PLANE_BASE_URL` | Plane instance URL |
 | `PLANE_API_TOKEN` | API token |
 | `PLANE_WORKSPACE` | Active workspace slug |
-| `PLANE_API_STYLE` | `issues` or `work-items` (default: `issues`) |
+| `PLANE_API_STYLE` | `issues` or `work-items` (auto-detected) |
+| `PLANE_CONFIG` | Path to custom config file |
 
 When both `PLANE_BASE_URL` and `PLANE_API_TOKEN` are set, no config file is needed.
 
@@ -235,6 +247,22 @@ bun run dev -- --help
 bun run build
 bun test
 ```
+
+### Testing
+
+The project includes 66 tests covering core functionality:
+
+```
+tests/
+├── core/
+│   ├── api-client.test.ts      # HTTP client, retry logic, pagination
+│   ├── config-store.test.ts    # Config loading/saving, env vars
+│   └── resolvers.test.ts       # Issue ref parsing, name resolution
+└── smoke/
+    └── cli-smoke.test.ts       # CLI version, help, command presence
+```
+
+Run tests with `npm test` (uses Vitest).
 
 ---
 

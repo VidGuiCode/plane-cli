@@ -167,6 +167,74 @@ export function createCycleCommand() {
             process.exit(1);
         }
     });
+    // ── create ─────────────────────────────────────────────────────────────────
+    command
+        .command("create <name>")
+        .description("Create a new cycle")
+        .option("--start <date>", "Start date (YYYY-MM-DD)")
+        .option("--end <date>", "End date (YYYY-MM-DD)")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--json", "Output raw JSON")
+        .action(async (name, opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            let projectId;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+            }
+            else {
+                projectId = requireActiveProject(config).id;
+            }
+            const body = { name };
+            if (opts.start)
+                body.start_date = opts.start;
+            if (opts.end)
+                body.end_date = opts.end;
+            const created = await client.post(`workspaces/${ws}/projects/${projectId}/cycles/`, body);
+            if (opts.json) {
+                printJson(created);
+            }
+            else {
+                printInfo(`Cycle "${created.name}" created successfully.`);
+            }
+        }
+        catch (err) {
+            printError(err instanceof PlaneApiError ? err.message : String(err));
+            process.exit(1);
+        }
+    });
+    // ── delete ─────────────────────────────────────────────────────────────────
+    command
+        .command("delete <cycle>")
+        .description("Delete a cycle (name or UUID)")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .action(async (cycleRef, opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            let projectId;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+            }
+            else {
+                projectId = requireActiveProject(config).id;
+            }
+            const cycle = await resolveCycle(client, ws, projectId, cycleRef);
+            await client.delete(`workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/`);
+            printInfo(`Cycle "${cycle.name}" deleted successfully.`);
+        }
+        catch (err) {
+            printError(err instanceof PlaneApiError ? err.message : String(err));
+            process.exit(1);
+        }
+    });
     return command;
 }
 //# sourceMappingURL=cycle.js.map

@@ -1,5 +1,6 @@
 import { Command } from "commander";
-import { loadConfig, createClient, requireActiveWorkspace, requireActiveProject, } from "../core/config-store.js";
+import { spawn } from "node:child_process";
+import { loadConfig, createClient, requireActiveWorkspace, requireActiveProject, requireActiveAccount, } from "../core/config-store.js";
 import { PlaneApiError, unwrap, fetchAll } from "../core/api-client.js";
 import { printInfo, printError, printTable, printJson } from "../core/output.js";
 import { ask } from "../core/prompt.js";
@@ -262,8 +263,7 @@ export function createIssueCommand() {
             if (opts.state) {
                 const stateRes = await client.get(`workspaces/${ws}/projects/${projectId}/states/`);
                 const states = unwrap(stateRes);
-                const match = states.find((s) => s.id === opts.state ||
-                    s.name.toLowerCase() === opts.state.toLowerCase());
+                const match = states.find((s) => s.id === opts.state || s.name.toLowerCase() === opts.state.toLowerCase());
                 body.state = match ? match.id : opts.state;
             }
             if (opts.assignee.length > 0) {
@@ -351,7 +351,9 @@ export function createIssueCommand() {
             const completed = states.find((s) => s.group === "completed");
             if (!completed)
                 throw new Error("No completed state found in this project.");
-            await client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, { state: completed.id });
+            await client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, {
+                state: completed.id,
+            });
             printInfo(`Closed ${identifier ? `${identifier}-` : ""}${issueRef}.`);
         }
         catch (err) {
@@ -388,8 +390,54 @@ export function createIssueCommand() {
             const reopen = states.find((s) => s.group === "backlog") ?? states.find((s) => s.group === "unstarted");
             if (!reopen)
                 throw new Error("No backlog or unstarted state found in this project.");
-            await client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, { state: reopen.id });
+            await client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, {
+                state: reopen.id,
+            });
             printInfo(`Reopened ${identifier ? `${identifier}-` : ""}${issueRef}.`);
+        }
+        catch (err) {
+            printError(err instanceof PlaneApiError ? err.message : String(err));
+            process.exit(1);
+        }
+    });
+    // ── open ───────────────────────────────────────────────────────────────────
+    command
+        .command("open <issue>")
+        .description("Open an issue in the default browser. Accepts: 42, PROJ-42, or UUID")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .action(async (issueRef, opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            const style = client.issuesSegment();
+            // Get baseUrl from active account for constructing the web URL
+            const account = requireActiveAccount(config);
+            const baseUrl = account.baseUrl.replace(/\/$/, ""); // Remove trailing slash
+            let activeProjectId;
+            let activeProjectIdentifier;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                activeProjectId = proj.id;
+                activeProjectIdentifier = proj.identifier;
+            }
+            else if (config.context.activeProject) {
+                activeProjectId = config.context.activeProject;
+                activeProjectIdentifier = config.context.activeProjectIdentifier;
+            }
+            const { issueId, projectId, identifier } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
+            // Fetch the issue to get its sequence_id for the URL
+            const issue = await client.get(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`);
+            // Construct the Plane web URL
+            // Format: {baseUrl}/{workspace}/projects/{project_identifier}/issues/{sequence_id}
+            const url = `${baseUrl}/${ws}/projects/${identifier}/issues/${issue.sequence_id}`;
+            // Open the URL in the default browser (cross-platform)
+            const platform = process.platform;
+            const command = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
+            const args = platform === "win32" ? ["", url] : [url]; // Windows start command needs an empty title arg
+            spawn(command, args, { shell: true, detached: true, stdio: "ignore" }).unref();
+            printInfo(`Opened ${identifier}-${issue.sequence_id} in browser: ${url}`);
         }
         catch (err) {
             printError(err instanceof PlaneApiError ? err.message : String(err));

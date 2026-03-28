@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { loadConfig, createClient, requireActiveWorkspace, } from "../core/config-store.js";
+import { loadConfig, createClient, requireActiveWorkspace } from "../core/config-store.js";
 import { PlaneApiError, fetchAll } from "../core/api-client.js";
 import { printInfo, printError, printJson, printTable } from "../core/output.js";
 import { ask } from "../core/prompt.js";
@@ -70,6 +70,33 @@ export function createCommentCommand() {
             process.exit(1);
         }
     });
+    // ── update ────────────────────────────────────────────────────────────────
+    command
+        .command("update <commentId> <issue>")
+        .description("Update a comment by UUID. Issue: 42, PROJ-42, or UUID")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--message <text>", "New comment text")
+        .action(async (commentId, issueRef, opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            const style = client.issuesSegment();
+            const { issueId, projectId } = await resolveCommentIssueTarget(ws, issueRef, opts.project, config, client, style);
+            const message = opts.message ?? (await ask("Comment"));
+            if (!message) {
+                printError("Comment text is required.");
+                process.exit(1);
+            }
+            await client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/comments/${commentId}/`, { comment_html: `<p>${message}</p>` });
+            printInfo("Comment updated.");
+        }
+        catch (err) {
+            printError(err instanceof PlaneApiError ? err.message : String(err));
+            process.exit(1);
+        }
+    });
     // ── delete ────────────────────────────────────────────────────────────────
     command
         .command("delete <commentId> <issue>")
@@ -113,7 +140,9 @@ function commentAuthor(comment) {
         return comment.created_by_detail.display_name;
     if (comment.actor_detail?.display_name)
         return comment.actor_detail.display_name;
-    if (comment.created_by && typeof comment.created_by === "object" && comment.created_by.display_name) {
+    if (comment.created_by &&
+        typeof comment.created_by === "object" &&
+        comment.created_by.display_name) {
         return comment.created_by.display_name;
     }
     if (typeof comment.created_by === "string")

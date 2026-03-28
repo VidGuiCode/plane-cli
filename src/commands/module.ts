@@ -51,7 +51,10 @@ export function createModuleCommand(): Command {
           return;
         }
 
-        if (opts.json) { printJson(modules); return; }
+        if (opts.json) {
+          printJson(modules);
+          return;
+        }
 
         const rows = modules.map((m) => [`  ${m.id}`, m.name, m.status ?? ""]);
         printTable(rows, ["ID", "NAME", "STATUS"]);
@@ -61,6 +64,46 @@ export function createModuleCommand(): Command {
       }
     });
 
+  // ── create ────────────────────────────────────────────────────────────────
+
+  command
+    .command("create <name>")
+    .description("Create a new module in the active (or specified) project")
+    .option("--workspace <slug>", "Workspace slug (overrides active context)")
+    .option("--project <identifier>", "Project identifier (overrides active context)")
+    .option("--json", "Output raw JSON")
+    .action(
+      async (name: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+
+          let projectId: string;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            projectId = proj.id;
+          } else {
+            projectId = requireActiveProject(config).id;
+          }
+
+          const created = await client.post<PlaneModule>(
+            `workspaces/${ws}/projects/${projectId}/modules/`,
+            { name },
+          );
+
+          if (opts.json) {
+            printJson(created);
+            return;
+          }
+          printInfo(`Module "${created.name}" created.`);
+        } catch (err) {
+          printError(err instanceof PlaneApiError ? err.message : String(err));
+          process.exit(1);
+        }
+      },
+    );
+
   // ── add ───────────────────────────────────────────────────────────────────
 
   command
@@ -68,39 +111,50 @@ export function createModuleCommand(): Command {
     .description("Add an issue to a module. Issue: 42, PROJ-42, or UUID. Module: name or UUID")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option("--project <identifier>", "Project identifier (overrides active context)")
-    .action(async (issueRef: string, moduleRef: string, opts: { workspace?: string; project?: string }) => {
-      try {
-        const config = loadConfig();
-        const client = createClient(config);
-        const ws = opts.workspace ?? requireActiveWorkspace(config);
-        const style = client.issuesSegment();
+    .action(
+      async (
+        issueRef: string,
+        moduleRef: string,
+        opts: { workspace?: string; project?: string },
+      ) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+          const style = client.issuesSegment();
 
-        let activeProjectId: string | undefined;
-        let activeProjectIdentifier: string | undefined;
-        if (opts.project) {
-          const proj = await resolveProject(client, ws, opts.project);
-          activeProjectId = proj.id;
-          activeProjectIdentifier = proj.identifier;
-        } else if (config.context.activeProject) {
-          activeProjectId = config.context.activeProject;
-          activeProjectIdentifier = config.context.activeProjectIdentifier;
+          let activeProjectId: string | undefined;
+          let activeProjectIdentifier: string | undefined;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            activeProjectId = proj.id;
+            activeProjectIdentifier = proj.identifier;
+          } else if (config.context.activeProject) {
+            activeProjectId = config.context.activeProject;
+            activeProjectIdentifier = config.context.activeProjectIdentifier;
+          }
+
+          const { issueId, projectId } = await resolveIssueRef(
+            client,
+            ws,
+            activeProjectId,
+            activeProjectIdentifier,
+            style,
+            issueRef,
+          );
+          const mod = await resolveModule(client, ws, projectId, moduleRef);
+
+          await client.post<unknown>(
+            `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`,
+            { issues: [issueId] },
+          );
+          printInfo(`Issue added to module "${mod.name}".`);
+        } catch (err) {
+          printError(err instanceof PlaneApiError ? err.message : String(err));
+          process.exit(1);
         }
-
-        const { issueId, projectId } = await resolveIssueRef(
-          client, ws, activeProjectId, activeProjectIdentifier, style, issueRef,
-        );
-        const mod = await resolveModule(client, ws, projectId, moduleRef);
-
-        await client.post<unknown>(
-          `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`,
-          { issues: [issueId] },
-        );
-        printInfo(`Issue added to module "${mod.name}".`);
-      } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   // ── issues ────────────────────────────────────────────────────────────────
 
@@ -110,55 +164,60 @@ export function createModuleCommand(): Command {
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option("--project <identifier>", "Project identifier (overrides active context)")
     .option("--json", "Output raw JSON")
-    .action(async (moduleRef: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
-      try {
-        const config = loadConfig();
-        const client = createClient(config);
-        const ws = opts.workspace ?? requireActiveWorkspace(config);
+    .action(
+      async (moduleRef: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
 
-        let projectId: string;
-        let identifier: string;
-        if (opts.project) {
-          const proj = await resolveProject(client, ws, opts.project);
-          projectId = proj.id;
-          identifier = proj.identifier;
-        } else {
-          const active = requireActiveProject(config);
-          projectId = active.id;
-          identifier = active.identifier;
+          let projectId: string;
+          let identifier: string;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            projectId = proj.id;
+            identifier = proj.identifier;
+          } else {
+            const active = requireActiveProject(config);
+            projectId = active.id;
+            identifier = active.identifier;
+          }
+
+          const mod = await resolveModule(client, ws, projectId, moduleRef);
+
+          const [issues, stateMap] = await Promise.all([
+            fetchAll<PlaneIssue>(
+              client,
+              `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`,
+            ),
+            client
+              .get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`)
+              .then((r) => buildStateMap(unwrap<PlaneState>(r))),
+          ]);
+
+          if (issues.length === 0) {
+            printInfo(`No issues in module "${mod.name}".`);
+            return;
+          }
+
+          if (opts.json) {
+            printJson(issues);
+            return;
+          }
+
+          const rows = issues.map((issue) => [
+            `${identifier}-${issue.sequence_id}`,
+            issue.name,
+            resolveState(issue, stateMap),
+            issue.priority ?? "",
+          ]);
+          printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
+        } catch (err) {
+          printError(err instanceof PlaneApiError ? err.message : String(err));
+          process.exit(1);
         }
-
-        const mod = await resolveModule(client, ws, projectId, moduleRef);
-
-        const [issues, stateMap] = await Promise.all([
-          fetchAll<PlaneIssue>(
-            client,
-            `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`,
-          ),
-          client
-            .get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`)
-            .then((r) => buildStateMap(unwrap<PlaneState>(r))),
-        ]);
-
-        if (issues.length === 0) {
-          printInfo(`No issues in module "${mod.name}".`);
-          return;
-        }
-
-        if (opts.json) { printJson(issues); return; }
-
-        const rows = issues.map((issue) => [
-          `${identifier}-${issue.sequence_id}`,
-          issue.name,
-          resolveState(issue, stateMap),
-          issue.priority ?? "",
-        ]);
-        printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
-      } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   // ── remove ────────────────────────────────────────────────────────────────
 
@@ -167,33 +226,75 @@ export function createModuleCommand(): Command {
     .description("Remove an issue from a module")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option("--project <identifier>", "Project identifier (overrides active context)")
-    .action(async (issueRef: string, moduleRef: string, opts: { workspace?: string; project?: string }) => {
+    .action(
+      async (
+        issueRef: string,
+        moduleRef: string,
+        opts: { workspace?: string; project?: string },
+      ) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+          const style = client.issuesSegment();
+
+          let activeProjectId: string | undefined;
+          let activeProjectIdentifier: string | undefined;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            activeProjectId = proj.id;
+            activeProjectIdentifier = proj.identifier;
+          } else if (config.context.activeProject) {
+            activeProjectId = config.context.activeProject;
+            activeProjectIdentifier = config.context.activeProjectIdentifier;
+          }
+
+          const { issueId, projectId } = await resolveIssueRef(
+            client,
+            ws,
+            activeProjectId,
+            activeProjectIdentifier,
+            style,
+            issueRef,
+          );
+          const mod = await resolveModule(client, ws, projectId, moduleRef);
+
+          await client.delete(
+            `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/${issueId}/`,
+          );
+          printInfo(`Issue removed from module "${mod.name}".`);
+        } catch (err) {
+          printError(err instanceof PlaneApiError ? err.message : String(err));
+          process.exit(1);
+        }
+      },
+    );
+
+  // ── delete ─────────────────────────────────────────────────────────────────
+
+  command
+    .command("delete <module>")
+    .description("Delete a module from the active (or specified) project")
+    .option("--workspace <slug>", "Workspace slug (overrides active context)")
+    .option("--project <identifier>", "Project identifier (overrides active context)")
+    .action(async (moduleRef: string, opts: { workspace?: string; project?: string }) => {
       try {
         const config = loadConfig();
         const client = createClient(config);
         const ws = opts.workspace ?? requireActiveWorkspace(config);
-        const style = client.issuesSegment();
 
-        let activeProjectId: string | undefined;
-        let activeProjectIdentifier: string | undefined;
+        let projectId: string;
         if (opts.project) {
           const proj = await resolveProject(client, ws, opts.project);
-          activeProjectId = proj.id;
-          activeProjectIdentifier = proj.identifier;
-        } else if (config.context.activeProject) {
-          activeProjectId = config.context.activeProject;
-          activeProjectIdentifier = config.context.activeProjectIdentifier;
+          projectId = proj.id;
+        } else {
+          projectId = requireActiveProject(config).id;
         }
 
-        const { issueId, projectId } = await resolveIssueRef(
-          client, ws, activeProjectId, activeProjectIdentifier, style, issueRef,
-        );
         const mod = await resolveModule(client, ws, projectId, moduleRef);
 
-        await client.delete(
-          `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/${issueId}/`,
-        );
-        printInfo(`Issue removed from module "${mod.name}".`);
+        await client.delete(`workspaces/${ws}/projects/${projectId}/modules/${mod.id}/`);
+        printInfo(`Module "${mod.name}" deleted.`);
       } catch (err) {
         printError(err instanceof PlaneApiError ? err.message : String(err));
         process.exit(1);

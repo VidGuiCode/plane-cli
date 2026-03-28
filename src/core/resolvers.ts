@@ -1,6 +1,14 @@
 import type { PlaneApiClient } from "./api-client.js";
 import { unwrap } from "./api-client.js";
-import type { PlaneProject, PlaneIssue, PlaneState, PlaneLabel, PlaneMember, PlaneCycle, PlaneModule } from "./types.js";
+import type {
+  PlaneProject,
+  PlaneIssue,
+  PlaneState,
+  PlaneLabel,
+  PlaneMember,
+  PlaneCycle,
+  PlaneModule,
+} from "./types.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,7 +45,11 @@ export function parseIssueRef(ref: string): IssueRef {
   // PROJ-42
   const slugMatch = ref.match(/^([A-Za-z][A-Za-z0-9_]*)-(\d+)$/);
   if (slugMatch) {
-    return { type: "slug", identifier: slugMatch[1].toUpperCase(), seq: parseInt(slugMatch[2], 10) };
+    return {
+      type: "slug",
+      identifier: slugMatch[1].toUpperCase(),
+      seq: parseInt(slugMatch[2], 10),
+    };
   }
   // Plain number
   const seqMatch = ref.match(/^(\d+)$/);
@@ -59,13 +71,24 @@ export async function resolveIssueRef(
 
   if (parsed.type === "uuid") {
     if (!activeProjectId) throw new Error("No active project. Run: plane project use <identifier>");
-    return { issueId: parsed.uuid, projectId: activeProjectId, identifier: activeProjectIdentifier ?? "" };
+    return {
+      issueId: parsed.uuid,
+      projectId: activeProjectId,
+      identifier: activeProjectIdentifier ?? "",
+    };
   }
 
   if (parsed.type === "slug") {
     // Resolve project by identifier prefix
     const project = await resolveProject(client, ws, parsed.identifier);
-    const issueId = await findIssueBySeq(client, ws, project.id, style, parsed.seq, `${parsed.identifier}-${parsed.seq}`);
+    const issueId = await findIssueBySeq(
+      client,
+      ws,
+      project.id,
+      style,
+      parsed.seq,
+      `${parsed.identifier}-${parsed.seq}`,
+    );
     return { issueId, projectId: project.id, identifier: project.identifier };
   }
 
@@ -102,10 +125,7 @@ export function buildStateMap(states: PlaneState[]): Map<string, string> {
   return new Map(states.map((s) => [s.id, s.name]));
 }
 
-export function resolveState(
-  issue: PlaneIssue,
-  stateMap: Map<string, string>,
-): string {
+export function resolveState(issue: PlaneIssue, stateMap: Map<string, string>): string {
   const s = issue.state;
   if (s && typeof s === "object" && "name" in s) return s.name;
   if (issue.state_detail?.name) return issue.state_detail.name;

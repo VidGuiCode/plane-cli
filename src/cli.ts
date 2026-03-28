@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module";
 import { Command } from "commander";
+import { createCompletionCommand } from "./commands/completion.js";
 import { createLoginCommand } from "./commands/login.js";
 import { createLogoutCommand } from "./commands/logout.js";
 import { createAccountCommand } from "./commands/account.js";
@@ -51,6 +52,7 @@ program
 
 program.addCommand(createLoginCommand());
 program.addCommand(createLogoutCommand());
+program.addCommand(createCompletionCommand(program));
 program.addCommand(createAccountCommand());
 program.addCommand(createWhereCommand());
 program.addCommand(createMembersCommand());

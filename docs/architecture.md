@@ -23,21 +23,38 @@ User-facing command groups. Each file exports a single `create*Command()` functi
 |---|---|
 | `login.ts` | `plane login` |
 | `logout.ts` | `plane logout` |
+| `completion.ts` | `plane completion bash/zsh/fish` |
 | `account.ts` | `plane account list/use/show/remove` |
 | `where.ts` | `plane where` |
 | `members.ts` | `plane members list` |
 | `workspace.ts` | `plane workspace list/use` |
 | `project.ts` | `plane project list/use/show` |
-| `issue.ts` | `plane issue list/get/create/update/delete/close/reopen` |
-| `module.ts` | `plane module list/add/issues/remove` |
-| `label.ts` | `plane label list/create/delete/add/remove` |
-| `comment.ts` | `plane comment list/add/delete` |
-| `cycle.ts` | `plane cycle list/issues/add/remove` |
-| `page.ts` | `plane page list/get` |
+| `issue.ts` | `plane issue list/get/create/update/delete/close/reopen/open` |
+| `module.ts` | `plane module list/add/issues/remove/create/delete` |
+| `label.ts` | `plane label list/create/delete/add/remove/update` |
+| `comment.ts` | `plane comment list/add/delete/update` |
+| `cycle.ts` | `plane cycle list/issues/add/remove/create/delete` |
+| `page.ts` | `plane page list/get/create/update/delete` |
 | `state.ts` | `plane state list` |
 | `upgrade.ts` | `plane upgrade` |
 
 Command handlers stay thin — they resolve context, call core helpers, and print output. Business logic lives in `src/core/`.
+
+### `tests/`
+
+Test suite using Vitest.
+
+```
+tests/
+├── core/
+│   ├── api-client.test.ts      # HTTP client, retry logic, pagination (24 tests)
+│   ├── config-store.test.ts    # Config loading/saving, env vars (18 tests)
+│   └── resolvers.test.ts       # Issue ref parsing, name resolution (21 tests)
+└── smoke/
+    └── cli-smoke.test.ts       # Version, help, command presence (3 tests)
+```
+
+Total: 66 tests. Run with `npm test`.
 
 ### `src/core/config-store.ts`
 
@@ -55,10 +72,11 @@ Responsibilities:
 Plane HTTP boundary.
 
 Responsibilities:
-- `PlaneApiClient` class — authenticated `get`, `post`, `patch`, `delete`
+- `PlaneApiClient` class — authenticated `get`, `post`, `patch`, `delete` with retry logic
 - `unwrap()` — normalise paginated or plain array responses
 - `fetchAll()` — cursor-based pagination helper (fetches all pages)
 - `PlaneApiError` — typed HTTP error
+- Retry logic — exponential backoff on 5xx errors, respects `Retry-After` header on 429 responses
 
 ### `src/core/resolvers.ts`
 
@@ -113,4 +131,4 @@ Command precedence for workspace/project: explicit flag → active context → e
 
 ## Environment variable overrides
 
-`PLANE_BASE_URL`, `PLANE_API_TOKEN`, `PLANE_WORKSPACE`, and `PLANE_API_STYLE` are checked at runtime. When both URL and token are set via env, no config file is required. This enables CI and container use.
+`PLANE_BASE_URL`, `PLANE_API_TOKEN`, `PLANE_WORKSPACE`, `PLANE_API_STYLE`, and `PLANE_CONFIG` are checked at runtime. When both URL and token are set via env, no config file is required. This enables CI and container use.

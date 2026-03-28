@@ -15,6 +15,9 @@ export function getConfigDir(): string {
 }
 
 export function getConfigPath(): string {
+  if (process.env.PLANE_CONFIG) {
+    return process.env.PLANE_CONFIG;
+  }
   return path.join(getConfigDir(), "config.json");
 }
 

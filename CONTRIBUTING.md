@@ -20,6 +20,23 @@ bun run build
 bun test
 ```
 
+## Testing
+
+Tests are organized in `tests/`:
+
+```
+tests/
+├── core/
+│   ├── api-client.test.ts      # HTTP client, retry logic, pagination (24 tests)
+│   ├── config-store.test.ts    # Config loading/saving, env vars (18 tests)
+│   └── resolvers.test.ts       # Issue ref parsing, name resolution (21 tests)
+└── smoke/
+    └── cli-smoke.test.ts       # Version, help, command presence (3 tests)
+```
+
+Run tests: `npm test` or `bun test`
+Run with coverage: `npm run test -- --coverage`
+
 ## Project Boundaries
 
 - Commands live in `src/commands/`

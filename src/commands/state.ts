@@ -35,9 +35,7 @@ export function createStateCommand(): Command {
           projectId = requireActiveProject(config).id;
         }
 
-        const res = await client.get<unknown>(
-          `workspaces/${ws}/projects/${projectId}/states/`,
-        );
+        const res = await client.get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`);
         const states = unwrap<PlaneState>(res);
 
         if (states.length === 0) {
@@ -45,7 +43,10 @@ export function createStateCommand(): Command {
           return;
         }
 
-        if (opts.json) { printJson(states); return; }
+        if (opts.json) {
+          printJson(states);
+          return;
+        }
 
         // Sort by group order
         const groupOrder = ["backlog", "unstarted", "started", "completed", "cancelled"];

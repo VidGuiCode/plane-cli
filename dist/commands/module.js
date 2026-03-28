@@ -43,6 +43,38 @@ export function createModuleCommand() {
             process.exit(1);
         }
     });
+    // ── create ────────────────────────────────────────────────────────────────
+    command
+        .command("create <name>")
+        .description("Create a new module in the active (or specified) project")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--json", "Output raw JSON")
+        .action(async (name, opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            let projectId;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+            }
+            else {
+                projectId = requireActiveProject(config).id;
+            }
+            const created = await client.post(`workspaces/${ws}/projects/${projectId}/modules/`, { name });
+            if (opts.json) {
+                printJson(created);
+                return;
+            }
+            printInfo(`Module "${created.name}" created.`);
+        }
+        catch (err) {
+            printError(err instanceof PlaneApiError ? err.message : String(err));
+            process.exit(1);
+        }
+    });
     // ── add ───────────────────────────────────────────────────────────────────
     command
         .command("add <issue> <module>")
@@ -155,6 +187,34 @@ export function createModuleCommand() {
             const mod = await resolveModule(client, ws, projectId, moduleRef);
             await client.delete(`workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/${issueId}/`);
             printInfo(`Issue removed from module "${mod.name}".`);
+        }
+        catch (err) {
+            printError(err instanceof PlaneApiError ? err.message : String(err));
+            process.exit(1);
+        }
+    });
+    // ── delete ─────────────────────────────────────────────────────────────────
+    command
+        .command("delete <module>")
+        .description("Delete a module from the active (or specified) project")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .action(async (moduleRef, opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            let projectId;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+            }
+            else {
+                projectId = requireActiveProject(config).id;
+            }
+            const mod = await resolveModule(client, ws, projectId, moduleRef);
+            await client.delete(`workspaces/${ws}/projects/${projectId}/modules/${mod.id}/`);
+            printInfo(`Module "${mod.name}" deleted.`);
         }
         catch (err) {
             printError(err instanceof PlaneApiError ? err.message : String(err));

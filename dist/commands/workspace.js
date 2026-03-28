@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { loadConfig, saveConfig, requireActiveAccount, createClient } from "../core/config-store.js";
+import { loadConfig, saveConfig, requireActiveAccount, createClient, } from "../core/config-store.js";
 import { unwrap } from "../core/api-client.js";
 import { printInfo, printTable, printJson } from "../core/output.js";
 export function createWorkspaceCommand() {
@@ -33,9 +33,7 @@ export function createWorkspaceCommand() {
         catch {
             // Endpoint not available on this instance — show from saved accounts
         }
-        const slugs = config.profiles
-            .map((p) => p.defaultWorkspace)
-            .filter((s) => !!s);
+        const slugs = config.profiles.map((p) => p.defaultWorkspace).filter((s) => !!s);
         const unique = [...new Set(slugs)];
         if (unique.length === 0) {
             printInfo("No workspaces found. Run: plane login");

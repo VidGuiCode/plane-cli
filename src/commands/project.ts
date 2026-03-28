@@ -34,7 +34,10 @@ export function createProjectCommand(): Command {
           return;
         }
 
-        if (opts.json) { printJson(projects); return; }
+        if (opts.json) {
+          printJson(projects);
+          return;
+        }
 
         const rows = projects.map((p) => [
           p.id === config.context.activeProject ? `* ${p.identifier}` : `  ${p.identifier}`,
@@ -92,9 +95,7 @@ export function createProjectCommand(): Command {
         const ws = requireActiveWorkspace(config);
         const { id: projectId, identifier } = requireActiveProject(config);
 
-        const project = await client.get<PlaneProject>(
-          `workspaces/${ws}/projects/${projectId}/`,
-        );
+        const project = await client.get<PlaneProject>(`workspaces/${ws}/projects/${projectId}/`);
         printInfo(`${identifier}  ${project.name}`);
         printInfo(`Description: ${project.description || "-"}`);
         printInfo(`Members:     ${project.total_members}`);

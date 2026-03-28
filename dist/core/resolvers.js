@@ -18,7 +18,11 @@ export function parseIssueRef(ref) {
     // PROJ-42
     const slugMatch = ref.match(/^([A-Za-z][A-Za-z0-9_]*)-(\d+)$/);
     if (slugMatch) {
-        return { type: "slug", identifier: slugMatch[1].toUpperCase(), seq: parseInt(slugMatch[2], 10) };
+        return {
+            type: "slug",
+            identifier: slugMatch[1].toUpperCase(),
+            seq: parseInt(slugMatch[2], 10),
+        };
     }
     // Plain number
     const seqMatch = ref.match(/^(\d+)$/);
@@ -32,7 +36,11 @@ export async function resolveIssueRef(client, ws, activeProjectId, activeProject
     if (parsed.type === "uuid") {
         if (!activeProjectId)
             throw new Error("No active project. Run: plane project use <identifier>");
-        return { issueId: parsed.uuid, projectId: activeProjectId, identifier: activeProjectIdentifier ?? "" };
+        return {
+            issueId: parsed.uuid,
+            projectId: activeProjectId,
+            identifier: activeProjectIdentifier ?? "",
+        };
     }
     if (parsed.type === "slug") {
         // Resolve project by identifier prefix

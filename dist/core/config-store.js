@@ -11,6 +11,9 @@ export function getConfigDir() {
     return path.join(os.homedir(), ".plane-cli");
 }
 export function getConfigPath() {
+    if (process.env.PLANE_CONFIG) {
+        return process.env.PLANE_CONFIG;
+    }
     return path.join(getConfigDir(), "config.json");
 }
 export function loadConfig() {

@@ -1,9 +1,11 @@
 import { Command } from "commander";
+import { spawn } from "node:child_process";
 import {
   loadConfig,
   createClient,
   requireActiveWorkspace,
   requireActiveProject,
+  requireActiveAccount,
 } from "../core/config-store.js";
 import { PlaneApiError, unwrap, fetchAll } from "../core/api-client.js";
 import { printInfo, printError, printTable, printJson } from "../core/output.js";
@@ -70,9 +72,7 @@ export function createIssueCommand(): Command {
               `workspaces/${ws}/projects/${projectId}/states/`,
             );
             const states = unwrap<PlaneState>(stateRes);
-            const match = states.find(
-              (s) => s.name.toLowerCase() === opts.state!.toLowerCase(),
-            );
+            const match = states.find((s) => s.name.toLowerCase() === opts.state!.toLowerCase());
             if (match) params.set("state", match.id);
           }
           if (opts.priority) params.set("priority", opts.priority);
@@ -125,81 +125,83 @@ export function createIssueCommand(): Command {
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option("--project <identifier>", "Project identifier (overrides active context)")
     .option("--json", "Output raw JSON")
-    .action(async (issueRef: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
-      try {
-        const config = loadConfig();
-        const client = createClient(config);
-        const ws = opts.workspace ?? requireActiveWorkspace(config);
-        const style = client.issuesSegment();
+    .action(
+      async (issueRef: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+          const style = client.issuesSegment();
 
-        let activeProjectId: string | undefined;
-        let activeProjectIdentifier: string | undefined;
+          let activeProjectId: string | undefined;
+          let activeProjectIdentifier: string | undefined;
 
-        if (opts.project) {
-          const proj = await resolveProject(client, ws, opts.project);
-          activeProjectId = proj.id;
-          activeProjectIdentifier = proj.identifier;
-        } else if (config.context.activeProject) {
-          activeProjectId = config.context.activeProject;
-          activeProjectIdentifier = config.context.activeProjectIdentifier;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            activeProjectId = proj.id;
+            activeProjectIdentifier = proj.identifier;
+          } else if (config.context.activeProject) {
+            activeProjectId = config.context.activeProject;
+            activeProjectIdentifier = config.context.activeProjectIdentifier;
+          }
+
+          const { issueId, projectId, identifier } = await resolveIssueRef(
+            client,
+            ws,
+            activeProjectId,
+            activeProjectIdentifier,
+            style,
+            issueRef,
+          );
+
+          const [issue, stateRes] = await Promise.all([
+            client.get<PlaneIssue>(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`),
+            client.get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`),
+          ]);
+          const stateMap = buildStateMap(unwrap<PlaneState>(stateRes));
+
+          if (opts.json) {
+            printJson(issue);
+            return;
+          }
+
+          printInfo(`${identifier}-${issue.sequence_id}  ${issue.name}`);
+          printInfo(`State:       ${resolveState(issue, stateMap)}`);
+          printInfo(`Priority:    ${issue.priority ?? "-"}`);
+
+          if (issue.description_html) {
+            const text = stripHtml(issue.description_html);
+            printInfo(`Description: ${text || "-"}`);
+          } else {
+            printInfo(`Description: ${issue.description_stripped ?? "-"}`);
+          }
+
+          // Parent
+          if (issue.parent) {
+            printInfo(`Parent:      ${issue.parent}`);
+          }
+
+          // Assignees
+          const assignees = issue.assignees ?? [];
+          printInfo(`Assignees:   ${assignees.length > 0 ? assignees.join(", ") : "-"}`);
+
+          // Labels
+          const labels = issue.labels ?? [];
+          const labelNames = labels.map((l) =>
+            typeof l === "object" && "name" in l ? l.name : String(l),
+          );
+          printInfo(`Labels:      ${labelNames.length > 0 ? labelNames.join(", ") : "-"}`);
+
+          if (issue.due_date) printInfo(`Due:         ${issue.due_date}`);
+          if (issue.start_date) printInfo(`Start:       ${issue.start_date}`);
+          printInfo(`Created:     ${issue.created_at}`);
+          printInfo(`Updated:     ${issue.updated_at}`);
+        } catch (err) {
+          printError(err instanceof PlaneApiError ? err.message : String(err));
+          process.exit(1);
         }
-
-        const { issueId, projectId, identifier } = await resolveIssueRef(
-          client,
-          ws,
-          activeProjectId,
-          activeProjectIdentifier,
-          style,
-          issueRef,
-        );
-
-        const [issue, stateRes] = await Promise.all([
-          client.get<PlaneIssue>(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`),
-          client.get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`),
-        ]);
-        const stateMap = buildStateMap(unwrap<PlaneState>(stateRes));
-
-        if (opts.json) {
-          printJson(issue);
-          return;
-        }
-
-        printInfo(`${identifier}-${issue.sequence_id}  ${issue.name}`);
-        printInfo(`State:       ${resolveState(issue, stateMap)}`);
-        printInfo(`Priority:    ${issue.priority ?? "-"}`);
-
-        if (issue.description_html) {
-          const text = stripHtml(issue.description_html);
-          printInfo(`Description: ${text || "-"}`);
-        } else {
-          printInfo(`Description: ${issue.description_stripped ?? "-"}`);
-        }
-
-        // Parent
-        if (issue.parent) {
-          printInfo(`Parent:      ${issue.parent}`);
-        }
-
-        // Assignees
-        const assignees = issue.assignees ?? [];
-        printInfo(`Assignees:   ${assignees.length > 0 ? assignees.join(", ") : "-"}`);
-
-        // Labels
-        const labels = issue.labels ?? [];
-        const labelNames = labels.map((l) =>
-          typeof l === "object" && "name" in l ? l.name : String(l),
-        );
-        printInfo(`Labels:      ${labelNames.length > 0 ? labelNames.join(", ") : "-"}`);
-
-        if (issue.due_date) printInfo(`Due:         ${issue.due_date}`);
-        if (issue.start_date) printInfo(`Start:       ${issue.start_date}`);
-        printInfo(`Created:     ${issue.created_at}`);
-        printInfo(`Updated:     ${issue.updated_at}`);
-      } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   // ── create ────────────────────────────────────────────────────────────────
 
@@ -263,9 +265,7 @@ export function createIssueCommand(): Command {
           if (opts.start) body.start_date = opts.start;
 
           if (opts.assignee.length > 0) {
-            const ids = await Promise.all(
-              opts.assignee.map((a) => resolveMember(client, ws, a)),
-            );
+            const ids = await Promise.all(opts.assignee.map((a) => resolveMember(client, ws, a)));
             body.assignees = ids;
           }
 
@@ -373,17 +373,13 @@ export function createIssueCommand(): Command {
             );
             const states = unwrap<PlaneState>(stateRes);
             const match = states.find(
-              (s) =>
-                s.id === opts.state ||
-                s.name.toLowerCase() === opts.state!.toLowerCase(),
+              (s) => s.id === opts.state || s.name.toLowerCase() === opts.state!.toLowerCase(),
             );
             body.state = match ? match.id : opts.state;
           }
 
           if (opts.assignee.length > 0) {
-            const ids = await Promise.all(
-              opts.assignee.map((a) => resolveMember(client, ws, a)),
-            );
+            const ids = await Promise.all(opts.assignee.map((a) => resolveMember(client, ws, a)));
             body.assignees = ids;
           }
 
@@ -451,7 +447,12 @@ export function createIssueCommand(): Command {
         }
 
         const { issueId, projectId, identifier } = await resolveIssueRef(
-          client, ws, activeProjectId, activeProjectIdentifier, style, issueRef,
+          client,
+          ws,
+          activeProjectId,
+          activeProjectIdentifier,
+          style,
+          issueRef,
         );
 
         await client.delete(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`);
@@ -488,18 +489,24 @@ export function createIssueCommand(): Command {
         }
 
         const { issueId, projectId, identifier } = await resolveIssueRef(
-          client, ws, activeProjectId, activeProjectIdentifier, style, issueRef,
+          client,
+          ws,
+          activeProjectId,
+          activeProjectIdentifier,
+          style,
+          issueRef,
         );
 
-        const stateRes = await client.get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`);
+        const stateRes = await client.get<unknown>(
+          `workspaces/${ws}/projects/${projectId}/states/`,
+        );
         const states = unwrap<PlaneState>(stateRes);
         const completed = states.find((s) => s.group === "completed");
         if (!completed) throw new Error("No completed state found in this project.");
 
-        await client.patch<unknown>(
-          `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
-          { state: completed.id },
-        );
+        await client.patch<unknown>(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, {
+          state: completed.id,
+        });
         printInfo(`Closed ${identifier ? `${identifier}-` : ""}${issueRef}.`);
       } catch (err) {
         printError(err instanceof PlaneApiError ? err.message : String(err));
@@ -533,19 +540,88 @@ export function createIssueCommand(): Command {
         }
 
         const { issueId, projectId, identifier } = await resolveIssueRef(
-          client, ws, activeProjectId, activeProjectIdentifier, style, issueRef,
+          client,
+          ws,
+          activeProjectId,
+          activeProjectIdentifier,
+          style,
+          issueRef,
         );
 
-        const stateRes = await client.get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`);
+        const stateRes = await client.get<unknown>(
+          `workspaces/${ws}/projects/${projectId}/states/`,
+        );
         const states = unwrap<PlaneState>(stateRes);
-        const reopen = states.find((s) => s.group === "backlog") ?? states.find((s) => s.group === "unstarted");
+        const reopen =
+          states.find((s) => s.group === "backlog") ?? states.find((s) => s.group === "unstarted");
         if (!reopen) throw new Error("No backlog or unstarted state found in this project.");
 
-        await client.patch<unknown>(
-          `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
-          { state: reopen.id },
-        );
+        await client.patch<unknown>(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, {
+          state: reopen.id,
+        });
         printInfo(`Reopened ${identifier ? `${identifier}-` : ""}${issueRef}.`);
+      } catch (err) {
+        printError(err instanceof PlaneApiError ? err.message : String(err));
+        process.exit(1);
+      }
+    });
+
+  // ── open ───────────────────────────────────────────────────────────────────
+
+  command
+    .command("open <issue>")
+    .description("Open an issue in the default browser. Accepts: 42, PROJ-42, or UUID")
+    .option("--workspace <slug>", "Workspace slug (overrides active context)")
+    .option("--project <identifier>", "Project identifier (overrides active context)")
+    .action(async (issueRef: string, opts: { workspace?: string; project?: string }) => {
+      try {
+        const config = loadConfig();
+        const client = createClient(config);
+        const ws = opts.workspace ?? requireActiveWorkspace(config);
+        const style = client.issuesSegment();
+
+        // Get baseUrl from active account for constructing the web URL
+        const account = requireActiveAccount(config);
+        const baseUrl = account.baseUrl.replace(/\/$/, ""); // Remove trailing slash
+
+        let activeProjectId: string | undefined;
+        let activeProjectIdentifier: string | undefined;
+        if (opts.project) {
+          const proj = await resolveProject(client, ws, opts.project);
+          activeProjectId = proj.id;
+          activeProjectIdentifier = proj.identifier;
+        } else if (config.context.activeProject) {
+          activeProjectId = config.context.activeProject;
+          activeProjectIdentifier = config.context.activeProjectIdentifier;
+        }
+
+        const { issueId, projectId, identifier } = await resolveIssueRef(
+          client,
+          ws,
+          activeProjectId,
+          activeProjectIdentifier,
+          style,
+          issueRef,
+        );
+
+        // Fetch the issue to get its sequence_id for the URL
+        const issue = await client.get<PlaneIssue>(
+          `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
+        );
+
+        // Construct the Plane web URL
+        // Format: {baseUrl}/{workspace}/projects/{project_identifier}/issues/{sequence_id}
+        const url = `${baseUrl}/${ws}/projects/${identifier}/issues/${issue.sequence_id}`;
+
+        // Open the URL in the default browser (cross-platform)
+        const platform = process.platform;
+        const command =
+          platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
+        const args = platform === "win32" ? ["", url] : [url]; // Windows start command needs an empty title arg
+
+        spawn(command, args, { shell: true, detached: true, stdio: "ignore" }).unref();
+
+        printInfo(`Opened ${identifier}-${issue.sequence_id} in browser: ${url}`);
       } catch (err) {
         printError(err instanceof PlaneApiError ? err.message : String(err));
         process.exit(1);

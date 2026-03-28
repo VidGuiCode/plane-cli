@@ -34,7 +34,10 @@ export function createMembersCommand(): Command {
           return;
         }
 
-        if (opts.json) { printJson(members); return; }
+        if (opts.json) {
+          printJson(members);
+          return;
+        }
 
         const rows = members.map((m) => [
           `  ${m.member__display_name}`,

@@ -13,9 +13,7 @@ export function printJson(value: unknown): void {
 export function printTable(rows: string[][], headers?: string[]): void {
   if (rows.length === 0 && !headers) return;
   const allRows = headers ? [headers, ...rows] : rows;
-  const widths = allRows[0].map((_, i) =>
-    Math.max(...allRows.map((r) => (r[i] ?? "").length)),
-  );
+  const widths = allRows[0].map((_, i) => Math.max(...allRows.map((r) => (r[i] ?? "").length)));
   if (headers) {
     console.log(headers.map((h, i) => h.padEnd(widths[i])).join("   "));
     console.log(widths.map((w) => "─".repeat(w)).join("   "));

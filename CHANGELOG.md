@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.7
+
+### New Commands
+- `plane completion <bash|zsh|fish>` — generate shell completion scripts
+- `plane issue open <ref>` — open an issue in the default browser
+- `plane cycle create <name>` — create a new cycle
+- `plane cycle delete <cycle>` — delete a cycle by name or UUID
+- `plane module create <name>` — create a new module
+- `plane module delete <module>` — delete a module by name or UUID
+- `plane label update <label> --name <name> --color <color>` — update an existing label
+- `plane comment update <commentId> <issue> --message <text>` — update an existing comment
+- `plane page create <name>` — create a new page
+- `plane page update <id>` — update an existing page
+- `plane page delete <id>` — delete a page by UUID
+
+### API & Authentication
+- API style detection now tries `work-items` first, falls back to `issues`
+- Added `--api-style` flag to `plane login` command for explicit control
+- Added `PLANE_CONFIG` environment variable support for custom config file path
+
+### Developer Experience
+- Added ESLint + Prettier configuration for code quality
+- Added unit tests for core modules using Vitest
+- Added retry logic and rate limiting in API client
+
 ## 0.1.6
 
 - Fix install on Windows: switch to GitHub release tarballs (`npm install -g https://github.com/.../releases/download/v{x}/plane-cli-{x}.tgz`); npm installs HTTPS tarballs as real directories — no junctions, no broken paths

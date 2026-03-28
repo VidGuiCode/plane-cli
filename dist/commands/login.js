@@ -8,6 +8,7 @@ export function createLoginCommand() {
         .description("Connect to a Plane instance and save credentials")
         .option("--url <url>", "Plane base URL (non-interactive)")
         .option("--token <token>", "API token (non-interactive)")
+        .option("--api-style <style>", "API style (work-items or issues)")
         .action(async (opts) => {
         try {
             const config = loadConfig();
@@ -95,7 +96,18 @@ export function createLoginCommand() {
                     process.exit(1);
                 }
             }
-            const apiStyle = await detectApiStyle(tempClient, workspaceSlug);
+            // Determine API style: use explicit flag if provided, otherwise auto-detect
+            let apiStyle;
+            if (opts.apiStyle === "issues" || opts.apiStyle === "work-items") {
+                apiStyle = opts.apiStyle;
+            }
+            else if (opts.apiStyle) {
+                printError(`Invalid --api-style: ${opts.apiStyle}. Use "issues" or "work-items".`);
+                process.exit(1);
+            }
+            else {
+                apiStyle = await detectApiStyle(tempClient, workspaceSlug);
+            }
             let accountName = workspaceSlug;
             if (config.profiles.some((p) => p.name === workspaceSlug)) {
                 accountName = await ask("Account name", workspaceSlug);
@@ -135,18 +147,32 @@ async function detectApiStyle(client, workspaceSlug) {
         const projects = unwrap(res);
         if (projects.length > 0) {
             const projectId = projects[0].id;
+            // Try modern "work-items" API first
             try {
-                await client.get(`workspaces/${workspaceSlug}/projects/${projectId}/issues/?per_page=1`);
-                return "issues";
+                await client.get(`workspaces/${workspaceSlug}/projects/${projectId}/work-items/?per_page=1`);
+                return "work-items";
             }
-            catch {
+            catch (err) {
+                // If we get a 404, the work-items endpoint doesn't exist (legacy Plane)
+                if (err instanceof PlaneApiError && err.status === 404) {
+                    // Fall back to legacy "issues" API
+                    try {
+                        await client.get(`workspaces/${workspaceSlug}/projects/${projectId}/issues/?per_page=1`);
+                        return "issues";
+                    }
+                    catch {
+                        // issues also failed, return "work-items" as safer default for modern Plane
+                        return "work-items";
+                    }
+                }
+                // For other errors (not 404), assume modern Plane with work-items
                 return "work-items";
             }
         }
     }
     catch {
-        // Cannot detect — fall back to self-hosted default
+        // Cannot detect — default to "work-items" as the modern standard
     }
-    return "issues";
+    return "work-items";
 }
 //# sourceMappingURL=login.js.map

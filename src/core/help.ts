@@ -29,7 +29,9 @@ const HELP_CONFIG = {
       rule(lines, "Commands");
       const tw = Math.max(...cmds.map((c) => helper.subcommandTerm(c).length));
       for (const sub of cmds) {
-        lines.push(`    ${helper.subcommandTerm(sub).padEnd(tw)}   ${helper.subcommandDescription(sub)}`);
+        lines.push(
+          `    ${helper.subcommandTerm(sub).padEnd(tw)}   ${helper.subcommandDescription(sub)}`,
+        );
       }
       lines.push("");
     }

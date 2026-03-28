@@ -5,7 +5,7 @@ import {
   requireActiveWorkspace,
   requireActiveProject,
 } from "../core/config-store.js";
-import { PlaneApiError, unwrap, fetchAll } from "../core/api-client.js";
+import { PlaneApiError, fetchAll } from "../core/api-client.js";
 import { printInfo, printError, printTable, printJson } from "../core/output.js";
 import { resolveProject, resolveIssueRef, resolveLabel } from "../core/resolvers.js";
 import type { PlaneLabel, PlaneIssue } from "../core/types.js";
@@ -47,7 +47,10 @@ export function createLabelCommand(): Command {
           return;
         }
 
-        if (opts.json) { printJson(labels); return; }
+        if (opts.json) {
+          printJson(labels);
+          return;
+        }
 
         const rows = labels.map((l) => [`  ${l.id}`, l.name, l.color ?? ""]);
         printTable(rows, ["ID", "NAME", "COLOR"]);
@@ -61,7 +64,9 @@ export function createLabelCommand(): Command {
 
   command
     .command("create <name> <color>")
-    .description("Create a label in the active (or specified) project. Color: hex code e.g. #ff0000")
+    .description(
+      "Create a label in the active (or specified) project. Color: hex code e.g. #ff0000",
+    )
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option("--project <identifier>", "Project identifier (overrides active context)")
     .action(async (name: string, color: string, opts: { workspace?: string; project?: string }) => {
@@ -78,10 +83,10 @@ export function createLabelCommand(): Command {
           projectId = requireActiveProject(config).id;
         }
 
-        await client.post<PlaneLabel>(
-          `workspaces/${ws}/projects/${projectId}/labels/`,
-          { name, color },
-        );
+        await client.post<PlaneLabel>(`workspaces/${ws}/projects/${projectId}/labels/`, {
+          name,
+          color,
+        });
         printInfo(`Label "${name}" created.`);
       } catch (err) {
         printError(err instanceof PlaneApiError ? err.message : String(err));
@@ -126,46 +131,59 @@ export function createLabelCommand(): Command {
     .description("Add a label to an issue. Issue: 42, PROJ-42, or UUID. Label: name or UUID")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option("--project <identifier>", "Project identifier (overrides active context)")
-    .action(async (issueRef: string, labelRef: string, opts: { workspace?: string; project?: string }) => {
-      try {
-        const config = loadConfig();
-        const client = createClient(config);
-        const ws = opts.workspace ?? requireActiveWorkspace(config);
-        const style = client.issuesSegment();
+    .action(
+      async (
+        issueRef: string,
+        labelRef: string,
+        opts: { workspace?: string; project?: string },
+      ) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+          const style = client.issuesSegment();
 
-        let activeProjectId: string | undefined;
-        let activeProjectIdentifier: string | undefined;
-        if (opts.project) {
-          const proj = await resolveProject(client, ws, opts.project);
-          activeProjectId = proj.id;
-          activeProjectIdentifier = proj.identifier;
-        } else if (config.context.activeProject) {
-          activeProjectId = config.context.activeProject;
-          activeProjectIdentifier = config.context.activeProjectIdentifier;
-        }
+          let activeProjectId: string | undefined;
+          let activeProjectIdentifier: string | undefined;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            activeProjectId = proj.id;
+            activeProjectIdentifier = proj.identifier;
+          } else if (config.context.activeProject) {
+            activeProjectId = config.context.activeProject;
+            activeProjectIdentifier = config.context.activeProjectIdentifier;
+          }
 
-        const { issueId, projectId } = await resolveIssueRef(
-          client, ws, activeProjectId, activeProjectIdentifier, style, issueRef,
-        );
-        const labelId = await resolveLabel(client, ws, projectId, labelRef);
-
-        const issue = await client.get<PlaneIssue>(
-          `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
-        );
-        const current = (issue.label_ids ?? (issue.labels as string[] | undefined) ?? []) as string[];
-        if (!current.includes(labelId)) {
-          current.push(labelId);
-          await client.patch<unknown>(
-            `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
-            { label_ids: current },
+          const { issueId, projectId } = await resolveIssueRef(
+            client,
+            ws,
+            activeProjectId,
+            activeProjectIdentifier,
+            style,
+            issueRef,
           );
+          const labelId = await resolveLabel(client, ws, projectId, labelRef);
+
+          const issue = await client.get<PlaneIssue>(
+            `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
+          );
+          const current = (issue.label_ids ??
+            (issue.labels as string[] | undefined) ??
+            []) as string[];
+          if (!current.includes(labelId)) {
+            current.push(labelId);
+            await client.patch<unknown>(
+              `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
+              { label_ids: current },
+            );
+          }
+          printInfo("Label added.");
+        } catch (err) {
+          printError(err instanceof PlaneApiError ? err.message : String(err));
+          process.exit(1);
         }
-        printInfo("Label added.");
-      } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   // ── remove ────────────────────────────────────────────────────────────────
 
@@ -174,44 +192,107 @@ export function createLabelCommand(): Command {
     .description("Remove a label from an issue. Issue: 42, PROJ-42, or UUID. Label: name or UUID")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option("--project <identifier>", "Project identifier (overrides active context)")
-    .action(async (issueRef: string, labelRef: string, opts: { workspace?: string; project?: string }) => {
-      try {
-        const config = loadConfig();
-        const client = createClient(config);
-        const ws = opts.workspace ?? requireActiveWorkspace(config);
-        const style = client.issuesSegment();
+    .action(
+      async (
+        issueRef: string,
+        labelRef: string,
+        opts: { workspace?: string; project?: string },
+      ) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+          const style = client.issuesSegment();
 
-        let activeProjectId: string | undefined;
-        let activeProjectIdentifier: string | undefined;
-        if (opts.project) {
-          const proj = await resolveProject(client, ws, opts.project);
-          activeProjectId = proj.id;
-          activeProjectIdentifier = proj.identifier;
-        } else if (config.context.activeProject) {
-          activeProjectId = config.context.activeProject;
-          activeProjectIdentifier = config.context.activeProjectIdentifier;
+          let activeProjectId: string | undefined;
+          let activeProjectIdentifier: string | undefined;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            activeProjectId = proj.id;
+            activeProjectIdentifier = proj.identifier;
+          } else if (config.context.activeProject) {
+            activeProjectId = config.context.activeProject;
+            activeProjectIdentifier = config.context.activeProjectIdentifier;
+          }
+
+          const { issueId, projectId } = await resolveIssueRef(
+            client,
+            ws,
+            activeProjectId,
+            activeProjectIdentifier,
+            style,
+            issueRef,
+          );
+          const labelId = await resolveLabel(client, ws, projectId, labelRef);
+
+          const issue = await client.get<PlaneIssue>(
+            `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
+          );
+          const current = (issue.label_ids ??
+            (issue.labels as string[] | undefined) ??
+            []) as string[];
+          const updated = current.filter((l) => l !== labelId);
+          await client.patch<unknown>(
+            `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
+            { label_ids: updated },
+          );
+          printInfo("Label removed.");
+        } catch (err) {
+          printError(err instanceof PlaneApiError ? err.message : String(err));
+          process.exit(1);
         }
+      },
+    );
 
-        const { issueId, projectId } = await resolveIssueRef(
-          client, ws, activeProjectId, activeProjectIdentifier, style, issueRef,
-        );
-        const labelId = await resolveLabel(client, ws, projectId, labelRef);
+  // ── update ─────────────────────────────────────────────────────────────────
 
-        const issue = await client.get<PlaneIssue>(
-          `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
-        );
-        const current = (issue.label_ids ?? (issue.labels as string[] | undefined) ?? []) as string[];
-        const updated = current.filter((l) => l !== labelId);
-        await client.patch<unknown>(
-          `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
-          { label_ids: updated },
-        );
-        printInfo("Label removed.");
-      } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+  command
+    .command("update <label>")
+    .description("Update a label's name or color")
+    .option("--name <new_name>", "New name for the label")
+    .option("--color <hex>", "New color (e.g., #ff0000)")
+    .option("--workspace <slug>", "Workspace slug (overrides active context)")
+    .option("--project <identifier>", "Project identifier (overrides active context)")
+    .action(
+      async (
+        labelRef: string,
+        opts: { name?: string; color?: string; workspace?: string; project?: string },
+      ) => {
+        try {
+          if (!opts.name && !opts.color) {
+            printError("At least one of --name or --color must be provided");
+            process.exit(1);
+          }
+
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+
+          let projectId: string;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            projectId = proj.id;
+          } else {
+            projectId = requireActiveProject(config).id;
+          }
+
+          const labelId = await resolveLabel(client, ws, projectId, labelRef);
+
+          const body: { name?: string; color?: string } = {};
+          if (opts.name) body.name = opts.name;
+          if (opts.color) body.color = opts.color;
+
+          await client.patch<PlaneLabel>(
+            `workspaces/${ws}/projects/${projectId}/labels/${labelId}/`,
+            body,
+          );
+          printInfo(`Label "${labelRef}" updated.`);
+        } catch (err) {
+          printError(err instanceof PlaneApiError ? err.message : String(err));
+          process.exit(1);
+        }
+      },
+    );
 
   return command;
 }

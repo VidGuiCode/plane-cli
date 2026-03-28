@@ -29,12 +29,13 @@ User-facing command groups. Each file exports a single `create*Command()` functi
 | `workspace.ts` | `plane workspace list/use` |
 | `project.ts` | `plane project list/use/show` |
 | `issue.ts` | `plane issue list/get/create/update/delete/close/reopen` |
-| `module.ts` | `plane module list/add/issues/remove/assign` |
+| `module.ts` | `plane module list/add/issues/remove` |
 | `label.ts` | `plane label list/create/delete/add/remove` |
 | `comment.ts` | `plane comment list/add/delete` |
 | `cycle.ts` | `plane cycle list/issues/add/remove` |
 | `page.ts` | `plane page list/get` |
 | `state.ts` | `plane state list` |
+| `upgrade.ts` | `plane upgrade` |
 
 Command handlers stay thin — they resolve context, call core helpers, and print output. Business logic lives in `src/core/`.
 

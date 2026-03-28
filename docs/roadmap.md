@@ -39,6 +39,9 @@
 ### States
 - `plane state list`
 
+### Upgrade
+- `plane upgrade` — check for updates and upgrade in one command; passive update hint on splash banner
+
 ### Infrastructure
 - Cursor-based pagination on all list endpoints
 - `--json` flag on all list and get commands

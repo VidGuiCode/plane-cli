@@ -2,6 +2,8 @@ import type { PlaneApiClient } from "./api-client.js";
 import { unwrap } from "./api-client.js";
 import type { PlaneProject, PlaneIssue, PlaneState, PlaneLabel, PlaneMember, PlaneCycle, PlaneModule } from "./types.js";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ── Project ──────────────────────────────────────────────────────────────────
 
 export async function resolveProject(
@@ -29,7 +31,7 @@ type IssueRef =
 
 export function parseIssueRef(ref: string): IssueRef {
   // UUID
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref)) {
+  if (UUID_RE.test(ref)) {
     return { type: "uuid", uuid: ref };
   }
   // PROJ-42
@@ -138,7 +140,7 @@ export async function resolveCycle(
   projectId: string,
   nameOrId: string,
 ): Promise<{ id: string; name: string }> {
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nameOrId)) {
+  if (UUID_RE.test(nameOrId)) {
     return { id: nameOrId, name: nameOrId };
   }
   const res = await client.get<unknown>(`workspaces/${ws}/projects/${projectId}/cycles/`);
@@ -157,7 +159,7 @@ export async function resolveModule(
   projectId: string,
   nameOrId: string,
 ): Promise<{ id: string; name: string }> {
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nameOrId)) {
+  if (UUID_RE.test(nameOrId)) {
     return { id: nameOrId, name: nameOrId };
   }
   const res = await client.get<unknown>(`workspaces/${ws}/projects/${projectId}/modules/`);

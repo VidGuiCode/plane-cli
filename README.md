@@ -167,6 +167,12 @@ plane page get <id>                  # show a page's content
 plane state list                     # list workflow states with group and color
 ```
 
+### Upgrade
+
+```bash
+plane upgrade                        # check for updates and upgrade to the latest version
+```
+
 All commands accept `--workspace <slug>` and `--project <identifier>` flags to override active context without switching permanently. Most list commands accept `--json` for raw JSON output.
 
 ---

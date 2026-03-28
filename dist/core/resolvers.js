@@ -1,4 +1,5 @@
 import { unwrap } from "./api-client.js";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // ── Project ──────────────────────────────────────────────────────────────────
 export async function resolveProject(client, ws, ref) {
     const res = await client.get(`workspaces/${ws}/projects/`);
@@ -11,7 +12,7 @@ export async function resolveProject(client, ws, ref) {
 }
 export function parseIssueRef(ref) {
     // UUID
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref)) {
+    if (UUID_RE.test(ref)) {
         return { type: "uuid", uuid: ref };
     }
     // PROJ-42
@@ -81,7 +82,7 @@ export async function resolveMember(client, ws, nameOrEmail) {
 }
 // ── Cycles ────────────────────────────────────────────────────────────────────
 export async function resolveCycle(client, ws, projectId, nameOrId) {
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nameOrId)) {
+    if (UUID_RE.test(nameOrId)) {
         return { id: nameOrId, name: nameOrId };
     }
     const res = await client.get(`workspaces/${ws}/projects/${projectId}/cycles/`);
@@ -94,7 +95,7 @@ export async function resolveCycle(client, ws, projectId, nameOrId) {
 }
 // ── Modules ───────────────────────────────────────────────────────────────────
 export async function resolveModule(client, ws, projectId, nameOrId) {
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nameOrId)) {
+    if (UUID_RE.test(nameOrId)) {
         return { id: nameOrId, name: nameOrId };
     }
     const res = await client.get(`workspaces/${ws}/projects/${projectId}/modules/`);

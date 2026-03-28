@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.1.3
+
+- Env var support: `PLANE_BASE_URL`, `PLANE_API_TOKEN`, `PLANE_WORKSPACE`, `PLANE_API_STYLE` — no config file needed in CI/automation
+- `plane issue delete` — delete an issue by ref
+- `plane issue close` / `plane issue reopen` — move to first completed/backlog state automatically
+- `plane label create <name> <color>` / `plane label delete <name>` — manage labels
+- `plane label add` / `plane label remove` — now accept names instead of raw UUIDs
+- `plane module add <issue> <module>` — name-based, consistent with `cycle add`
+- `plane comment delete <id> <issue>` — delete a comment by UUID
+- Removed legacy `plane module assign` (replaced by `plane module add`)
+- `plane upgrade` — check for updates and upgrade in one command
+- Update hint shown on `plane` splash when a newer version is available
+- Rebuilt and shipped updated `dist/`
 
 ## 0.1.2
 

@@ -43,32 +43,6 @@ export function createModuleCommand() {
             process.exit(1);
         }
     });
-    command
-        .command("assign <issue> <module>")
-        .description("Assign an issue to a module (UUIDs)")
-        .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
-        .action(async (issueId, moduleId, opts) => {
-        try {
-            const config = loadConfig();
-            const client = createClient(config);
-            const ws = opts.workspace ?? requireActiveWorkspace(config);
-            let projectId;
-            if (opts.project) {
-                const proj = await resolveProject(client, ws, opts.project);
-                projectId = proj.id;
-            }
-            else {
-                projectId = requireActiveProject(config).id;
-            }
-            await client.post(`workspaces/${ws}/projects/${projectId}/modules/${moduleId}/module-issues/`, { issues: [issueId] });
-            printInfo("Issue assigned to module.");
-        }
-        catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
-        }
-    });
     // ── add ───────────────────────────────────────────────────────────────────
     command
         .command("add <issue> <module>")

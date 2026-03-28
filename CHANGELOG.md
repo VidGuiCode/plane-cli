@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- Fix GitHub install on Windows: npm creates a broken directory junction (not a real copy) for git dependencies that have no `prepare` script; adding a no-op `prepare` script forces npm to do a full pack-and-install, producing a real directory
+- `dist/` is still committed — no build step required during install
+
 ## 0.1.4
 
 - Fix install failure on Windows: `npm install -g github:VidGuiCode/plane-cli` was creating a broken junction to a temporary git-clone directory that npm later cleaned up; now uses tagged installs (`#v{version}`) so npm fetches a proper GitHub archive tarball instead of cloning

@@ -1,6 +1,6 @@
 {
   "name": "plane-cli",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Unofficial CLI for Plane",
   "license": "MIT",
   "private": false,
@@ -17,6 +17,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "prepare": "node --version",
     "build": "tsc -p tsconfig.json",
     "clean": "powershell -NoProfile -Command \"if (Test-Path dist) { Remove-Item -Recurse -Force dist }\"",
     "dev": "bun src/cli.ts",

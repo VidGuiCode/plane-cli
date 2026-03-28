@@ -7,7 +7,6 @@ const require = createRequire(import.meta.url);
 const pkg = require("../../package.json") as { version: string };
 
 const REPO_RAW = "https://raw.githubusercontent.com/VidGuiCode/plane-cli/main/package.json";
-const INSTALL_CMD = "github:VidGuiCode/plane-cli";
 
 export async function fetchLatestVersion(): Promise<string | null> {
   try {
@@ -49,16 +48,17 @@ export function createUpgradeCommand(): Command {
         return;
       }
 
-      printInfo(`Upgrading...    npm install -g ${INSTALL_CMD}`);
+      const installCmd = `github:VidGuiCode/plane-cli#v${latest}`;
+      printInfo(`Upgrading...    npm install -g ${installCmd}`);
       console.log("");
 
-      const result = spawnSync("npm", ["install", "-g", INSTALL_CMD], {
+      const result = spawnSync("npm", ["install", "-g", installCmd], {
         stdio: "inherit",
         shell: true,
       });
 
       if (result.status !== 0) {
-        printError(`Upgrade failed. Try running manually: npm install -g ${INSTALL_CMD}`);
+        printError(`Upgrade failed. Try running manually: npm install -g ${installCmd}`);
         process.exit(1);
       }
 

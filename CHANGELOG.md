@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Fix install failure on Windows: `npm install -g github:VidGuiCode/plane-cli` was creating a broken junction to a temporary git-clone directory that npm later cleaned up; now uses tagged installs (`#v{version}`) so npm fetches a proper GitHub archive tarball instead of cloning
+- `plane upgrade` now installs the exact tagged version (`github:VidGuiCode/plane-cli#v{latest}`) to benefit from the same fix
+
 ## 0.1.3
 
 - Env var support: `PLANE_BASE_URL`, `PLANE_API_TOKEN`, `PLANE_WORKSPACE`, `PLANE_API_STYLE` — no config file needed in CI/automation

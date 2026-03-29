@@ -1,9 +1,11 @@
 import { Command } from "commander";
 import { spawn } from "node:child_process";
 import { loadConfig, createClient, requireActiveWorkspace, requireActiveProject, requireActiveAccount, } from "../core/config-store.js";
-import { PlaneApiError, unwrap, fetchAll } from "../core/api-client.js";
-import { printInfo, printError, printTable, printJson } from "../core/output.js";
+import { unwrap, fetchAll } from "../core/api-client.js";
+import { printInfo, printTable, printJson } from "../core/output.js";
 import { ask } from "../core/prompt.js";
+import { exitWithError, ValidationError } from "../core/errors.js";
+import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
 import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, } from "../core/resolvers.js";
 export function createIssueCommand() {
@@ -15,11 +17,12 @@ export function createIssueCommand() {
         .command("list")
         .description("List issues in the active (or specified) project")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--state <name>", "Filter by state name")
         .option("--priority <value>", "Filter by priority: urgent | high | medium | low | none")
         .option("--assignee <name>", "Filter by assignee display name or email")
         .option("--json", "Output raw JSON")
+        .option("--fields <names>", "Comma-separated fields for JSON output")
         .action(async (opts) => {
         try {
             const config = loadConfig();
@@ -66,7 +69,11 @@ export function createIssueCommand() {
                 return;
             }
             if (opts.json) {
-                printJson(issues);
+                const fields = opts.fields;
+                const projected = fields
+                    ? issues.map((issue) => projectIssue(issue, stateMap, identifier, fields))
+                    : issues;
+                printJson(projected);
                 return;
             }
             const rows = issues.map((issue) => [
@@ -78,8 +85,7 @@ export function createIssueCommand() {
             printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── get ───────────────────────────────────────────────────────────────────
@@ -87,8 +93,9 @@ export function createIssueCommand() {
         .command("get <issue>")
         .description("Fetch a single issue. Accepts: 42 (active project), PROJ-42 (any project), or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
+        .option("--fields <names>", "Comma-separated fields for JSON output")
         .action(async (issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -113,7 +120,7 @@ export function createIssueCommand() {
             ]);
             const stateMap = buildStateMap(unwrap(stateRes));
             if (opts.json) {
-                printJson(issue);
+                printJson(opts.fields ? projectIssue(issue, stateMap, identifier, opts.fields) : issue);
                 return;
             }
             printInfo(`${identifier}-${issue.sequence_id}  ${issue.name}`);
@@ -145,8 +152,7 @@ export function createIssueCommand() {
             printInfo(`Updated:     ${issue.updated_at}`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── create ────────────────────────────────────────────────────────────────
@@ -154,7 +160,7 @@ export function createIssueCommand() {
         .command("create")
         .description("Create an issue in the active (or specified) project")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--title <title>", "Issue title")
         .option("--description <description>", "Issue description")
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
@@ -163,6 +169,7 @@ export function createIssueCommand() {
         .option("--parent <ref>", "Parent issue ref (sequence number, PROJ-42, or UUID)")
         .option("--due <YYYY-MM-DD>", "Due date")
         .option("--start <YYYY-MM-DD>", "Start date")
+        .option("--json", "Output raw JSON")
         .action(async (opts) => {
         try {
             const config = loadConfig();
@@ -183,8 +190,7 @@ export function createIssueCommand() {
             }
             const title = opts.title ?? (await ask("Title"));
             if (!title) {
-                printError("Title is required.");
-                process.exit(1);
+                throw new ValidationError("Title is required.");
             }
             const description = opts.description ?? (await ask("Description (optional)"));
             const body = { name: title };
@@ -208,12 +214,30 @@ export function createIssueCommand() {
                 const { issueId: parentId } = await resolveIssueRef(client, ws, projectId, identifier, style, opts.parent);
                 body.parent = parentId;
             }
-            const issue = await client.post(`workspaces/${ws}/projects/${projectId}/${style}/`, body);
+            const path = `workspaces/${ws}/projects/${projectId}/${style}/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "POST",
+                    path,
+                    body,
+                    context: {
+                        workspace: ws,
+                        projectId,
+                        projectIdentifier: identifier,
+                    },
+                });
+                return;
+            }
+            const issue = await client.post(path, body);
+            if (opts.json) {
+                printJson(issue);
+                return;
+            }
             printInfo(`Created ${identifier}-${issue.sequence_id}: ${issue.name}`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── update ────────────────────────────────────────────────────────────────
@@ -221,7 +245,7 @@ export function createIssueCommand() {
         .command("update <issue>")
         .description("Update an existing issue")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--title <title>", "New title")
         .option("--description <description>", "New description")
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
@@ -231,6 +255,7 @@ export function createIssueCommand() {
         .option("--parent <ref>", "Parent issue ref (sequence number, PROJ-42, or UUID)")
         .option("--due <YYYY-MM-DD>", "Due date (use 'none' to clear)")
         .option("--start <YYYY-MM-DD>", "Start date (use 'none' to clear)")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -279,15 +304,33 @@ export function createIssueCommand() {
                 body.parent = parentId;
             }
             if (Object.keys(body).length === 0) {
-                printError("Nothing to update. Use --title, --description, --priority, --state, --assignee, --label, --parent, --due, or --start.");
-                process.exit(1);
+                throw new ValidationError("Nothing to update. Use --title, --description, --priority, --state, --assignee, --label, --parent, --due, or --start.");
             }
-            const issue = await client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, body);
+            const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "PATCH",
+                    path,
+                    body,
+                    context: {
+                        workspace: ws,
+                        projectId,
+                        projectIdentifier: identifier,
+                        issueId,
+                    },
+                });
+                return;
+            }
+            const issue = await client.patch(path, body);
+            if (opts.json) {
+                printJson(issue);
+                return;
+            }
             printInfo(`Updated ${identifier}-${issue.sequence_id}: ${issue.name}`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── delete ────────────────────────────────────────────────────────────────
@@ -295,7 +338,8 @@ export function createIssueCommand() {
         .command("delete <issue>")
         .description("Delete an issue. Accepts: 42, PROJ-42, or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -314,12 +358,30 @@ export function createIssueCommand() {
                 activeProjectIdentifier = config.context.activeProjectIdentifier;
             }
             const { issueId, projectId, identifier } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
-            await client.delete(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`);
+            const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "DELETE",
+                    path,
+                    context: {
+                        workspace: ws,
+                        projectId,
+                        projectIdentifier: identifier,
+                        issueId,
+                    },
+                });
+                return;
+            }
+            await client.delete(path);
+            if (opts.json) {
+                printJson({ deleted: true, issueId, projectId, identifier });
+                return;
+            }
             printInfo(`Deleted ${identifier ? `${identifier}-` : ""}${issueRef}.`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── close ─────────────────────────────────────────────────────────────────
@@ -327,7 +389,8 @@ export function createIssueCommand() {
         .command("close <issue>")
         .description("Move an issue to its first completed state")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -350,15 +413,33 @@ export function createIssueCommand() {
             const states = unwrap(stateRes);
             const completed = states.find((s) => s.group === "completed");
             if (!completed)
-                throw new Error("No completed state found in this project.");
-            await client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, {
-                state: completed.id,
-            });
+                throw new ValidationError("No completed state found in this project.");
+            const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`;
+            const body = { state: completed.id };
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "PATCH",
+                    path,
+                    body,
+                    context: {
+                        workspace: ws,
+                        projectId,
+                        projectIdentifier: identifier,
+                        issueId,
+                    },
+                });
+                return;
+            }
+            const issue = await client.patch(path, body);
+            if (opts.json) {
+                printJson(issue);
+                return;
+            }
             printInfo(`Closed ${identifier ? `${identifier}-` : ""}${issueRef}.`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── reopen ────────────────────────────────────────────────────────────────
@@ -366,7 +447,8 @@ export function createIssueCommand() {
         .command("reopen <issue>")
         .description("Move an issue back to its first backlog (or unstarted) state")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -387,17 +469,36 @@ export function createIssueCommand() {
             const { issueId, projectId, identifier } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
             const stateRes = await client.get(`workspaces/${ws}/projects/${projectId}/states/`);
             const states = unwrap(stateRes);
-            const reopen = states.find((s) => s.group === "backlog") ?? states.find((s) => s.group === "unstarted");
+            const reopen = states.find((s) => s.group === "backlog") ??
+                states.find((s) => s.group === "unstarted");
             if (!reopen)
-                throw new Error("No backlog or unstarted state found in this project.");
-            await client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, {
-                state: reopen.id,
-            });
+                throw new ValidationError("No backlog or unstarted state found in this project.");
+            const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`;
+            const body = { state: reopen.id };
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "PATCH",
+                    path,
+                    body,
+                    context: {
+                        workspace: ws,
+                        projectId,
+                        projectIdentifier: identifier,
+                        issueId,
+                    },
+                });
+                return;
+            }
+            const issue = await client.patch(path, body);
+            if (opts.json) {
+                printJson(issue);
+                return;
+            }
             printInfo(`Reopened ${identifier ? `${identifier}-` : ""}${issueRef}.`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── open ───────────────────────────────────────────────────────────────────
@@ -405,7 +506,8 @@ export function createIssueCommand() {
         .command("open <issue>")
         .description("Open an issue in the default browser. Accepts: 42, PROJ-42, or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -436,17 +538,56 @@ export function createIssueCommand() {
             const platform = process.platform;
             const command = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
             const args = platform === "win32" ? ["", url] : [url]; // Windows start command needs an empty title arg
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    action: "issue.open",
+                    url,
+                    context: { workspace: ws, projectId, issueId, identifier },
+                });
+                return;
+            }
             spawn(command, args, { shell: true, detached: true, stdio: "ignore" }).unref();
+            if (opts.json) {
+                printJson({ success: true, action: "issue.open", url, issueId, projectId, identifier });
+                return;
+            }
             printInfo(`Opened ${identifier}-${issue.sequence_id} in browser: ${url}`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     return command;
 }
 function collect(value, previous) {
     return [...previous, value];
+}
+function projectIssue(issue, stateMap, identifier, fieldsCsv) {
+    const requested = fieldsCsv
+        .split(",")
+        .map((field) => field.trim())
+        .filter(Boolean);
+    const full = {
+        id: issue.id,
+        identifier: `${identifier}-${issue.sequence_id}`,
+        sequence: issue.sequence_id,
+        title: issue.name,
+        state: resolveState(issue, stateMap),
+        priority: issue.priority,
+        assignees: issue.assignees ?? [],
+        labels: (issue.labels ?? []).map((label) => typeof label === "object" && "name" in label ? label.name : String(label)),
+        parent: issue.parent ?? null,
+        dueDate: issue.due_date ?? null,
+        startDate: issue.start_date ?? null,
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
+        description: issue.description_stripped ?? issue.description_html ?? null,
+    };
+    return requested.reduce((acc, field) => {
+        if (field in full)
+            acc[field] = full[field];
+        return acc;
+    }, {});
 }
 //# sourceMappingURL=issue.js.map

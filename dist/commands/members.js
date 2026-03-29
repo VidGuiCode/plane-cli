@@ -1,7 +1,8 @@
 import { Command } from "commander";
 import { loadConfig, createClient, requireActiveWorkspace } from "../core/config-store.js";
-import { PlaneApiError, fetchAll } from "../core/api-client.js";
-import { printInfo, printError, printTable, printJson } from "../core/output.js";
+import { fetchAll } from "../core/api-client.js";
+import { printInfo, printTable, printJson } from "../core/output.js";
+import { exitWithError } from "../core/errors.js";
 const ROLE_NAMES = {
     5: "Owner",
     10: "Admin",
@@ -39,8 +40,7 @@ export function createMembersCommand() {
             printTable(rows, ["NAME", "EMAIL", "ROLE"]);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     return command;

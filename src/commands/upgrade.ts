@@ -1,7 +1,8 @@
 import { Command } from "commander";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { printInfo, printError } from "../core/output.js";
+import { printInfo } from "../core/output.js";
+import { exitWithError } from "../core/errors.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json") as { version: string };
@@ -36,8 +37,7 @@ export function createUpgradeCommand(): Command {
 
       const latest = await fetchLatestVersion();
       if (!latest) {
-        printError("Could not reach GitHub to check for updates.");
-        process.exit(1);
+        exitWithError(new Error("Could not reach GitHub to check for updates."));
       }
 
       printInfo(`Current version : v${pkg.version}`);
@@ -58,8 +58,9 @@ export function createUpgradeCommand(): Command {
       });
 
       if (result.status !== 0) {
-        printError(`Upgrade failed. Try running manually: npm install -g ${tarballUrl}`);
-        process.exit(1);
+        exitWithError(
+          new Error(`Upgrade failed. Try running manually: npm install -g ${tarballUrl}`),
+        );
       }
 
       console.log("");

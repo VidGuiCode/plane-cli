@@ -1,8 +1,10 @@
 import { Command } from "commander";
 import { loadConfig, createClient, requireActiveWorkspace } from "../core/config-store.js";
-import { PlaneApiError, fetchAll } from "../core/api-client.js";
-import { printInfo, printError, printJson, printTable } from "../core/output.js";
+import { fetchAll } from "../core/api-client.js";
+import { printInfo, printJson, printTable } from "../core/output.js";
 import { ask } from "../core/prompt.js";
+import { exitWithError, ValidationError } from "../core/errors.js";
+import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
 import { resolveProject, resolveIssueRef } from "../core/resolvers.js";
 export function createCommentCommand() {
@@ -13,7 +15,7 @@ export function createCommentCommand() {
         .command("list <issue>")
         .description("List comments on an issue. Accepts: 42, PROJ-42, or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
         .action(async (issueRef, opts) => {
         try {
@@ -40,16 +42,16 @@ export function createCommentCommand() {
             printTable(rows, ["ID", "AUTHOR", "CREATED", "MESSAGE"]);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     command
         .command("add <issue>")
         .description("Add a comment to an issue. Accepts: 42, PROJ-42, or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--message <message>", "Comment text")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -59,15 +61,29 @@ export function createCommentCommand() {
             const { issueId, projectId } = await resolveCommentIssueTarget(ws, issueRef, opts.project, config, client, style);
             const message = opts.message ?? (await ask("Comment"));
             if (!message) {
-                printError("Comment text is required.");
-                process.exit(1);
+                throw new ValidationError("Comment text is required.");
             }
-            await client.post(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/comments/`, { comment_html: `<p>${message}</p>` });
+            const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/comments/`;
+            const body = { comment_html: `<p>${message}</p>` };
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "POST",
+                    path,
+                    body,
+                    context: { workspace: ws, projectId, issueId },
+                });
+                return;
+            }
+            const comment = await client.post(path, body);
+            if (opts.json) {
+                printJson(comment);
+                return;
+            }
             printInfo("Comment added.");
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── update ────────────────────────────────────────────────────────────────
@@ -75,8 +91,9 @@ export function createCommentCommand() {
         .command("update <commentId> <issue>")
         .description("Update a comment by UUID. Issue: 42, PROJ-42, or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--message <text>", "New comment text")
+        .option("--json", "Output raw JSON")
         .action(async (commentId, issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -86,15 +103,29 @@ export function createCommentCommand() {
             const { issueId, projectId } = await resolveCommentIssueTarget(ws, issueRef, opts.project, config, client, style);
             const message = opts.message ?? (await ask("Comment"));
             if (!message) {
-                printError("Comment text is required.");
-                process.exit(1);
+                throw new ValidationError("Comment text is required.");
             }
-            await client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/comments/${commentId}/`, { comment_html: `<p>${message}</p>` });
+            const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/comments/${commentId}/`;
+            const body = { comment_html: `<p>${message}</p>` };
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "PATCH",
+                    path,
+                    body,
+                    context: { workspace: ws, projectId, issueId, commentId },
+                });
+                return;
+            }
+            const comment = await client.patch(path, body);
+            if (opts.json) {
+                printJson(comment);
+                return;
+            }
             printInfo("Comment updated.");
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── delete ────────────────────────────────────────────────────────────────
@@ -102,7 +133,8 @@ export function createCommentCommand() {
         .command("delete <commentId> <issue>")
         .description("Delete a comment by UUID. Issue: 42, PROJ-42, or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (commentId, issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -110,12 +142,25 @@ export function createCommentCommand() {
             const ws = opts.workspace ?? requireActiveWorkspace(config);
             const style = client.issuesSegment();
             const { issueId, projectId } = await resolveCommentIssueTarget(ws, issueRef, opts.project, config, client, style);
-            await client.delete(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/comments/${commentId}/`);
+            const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/comments/${commentId}/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "DELETE",
+                    path,
+                    context: { workspace: ws, projectId, issueId, commentId },
+                });
+                return;
+            }
+            await client.delete(path);
+            if (opts.json) {
+                printJson({ deleted: true, commentId, issueId, projectId });
+                return;
+            }
             printInfo("Comment deleted.");
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     return command;

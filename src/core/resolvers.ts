@@ -1,5 +1,5 @@
 import type { PlaneApiClient } from "./api-client.js";
-import { unwrap } from "./api-client.js";
+import { unwrap, fetchAll } from "./api-client.js";
 import type {
   PlaneProject,
   PlaneIssue,
@@ -110,10 +110,11 @@ async function findIssueBySeq(
   seq: number,
   originalRef: string,
 ): Promise<string> {
-  const res = await client.get<unknown>(
-    `workspaces/${ws}/projects/${projectId}/${style}/?per_page=100`,
+  // Fetch all issues to find by sequence_id (Plane API doesn't support filtering by sequence)
+  const issues = await fetchAll<PlaneIssue>(
+    client,
+    `workspaces/${ws}/projects/${projectId}/${style}/`,
   );
-  const issues = unwrap<PlaneIssue>(res);
   const found = issues.find((i) => i.sequence_id === seq);
   if (!found) throw new Error(`Issue ${originalRef} not found.`);
   return found.id;
@@ -198,6 +199,9 @@ export async function resolveLabel(
   projectId: string,
   nameOrColor: string,
 ): Promise<string> {
+  if (UUID_RE.test(nameOrColor)) {
+    return nameOrColor;
+  }
   const res = await client.get<unknown>(`workspaces/${ws}/projects/${projectId}/labels/`);
   const labels = unwrap<PlaneLabel>(res);
   const lower = nameOrColor.toLowerCase();

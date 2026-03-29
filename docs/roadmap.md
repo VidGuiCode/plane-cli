@@ -1,6 +1,13 @@
 # Roadmap
 
-## v0.1.7 — Current Release (Complete)
+## v0.2.0 — Current Release (Complete)
+
+### AI-first additions
+- `plane discover context`
+- `plane discover issue-inputs`
+- normalized `plane where --json` and `plane profile --json`
+- global `--dry-run`, `--no-interactive`, and `--compact`
+- `plane issue list/get --fields ...`
 
 ### Account and auth
 - `plane login` — interactive + non-interactive (`--url`/`--token` flags, `--api-style`)

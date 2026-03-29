@@ -5,8 +5,9 @@ import {
   requireActiveWorkspace,
   requireActiveProject,
 } from "../core/config-store.js";
-import { PlaneApiError, unwrap } from "../core/api-client.js";
-import { printInfo, printError, printTable, printJson } from "../core/output.js";
+import { unwrap } from "../core/api-client.js";
+import { printInfo, printTable, printJson } from "../core/output.js";
+import { exitWithError } from "../core/errors.js";
 import { resolveProject } from "../core/resolvers.js";
 import type { PlaneState } from "../core/types.js";
 
@@ -19,7 +20,10 @@ export function createStateCommand(): Command {
     .command("list")
     .description("List workflow states in the active (or specified) project")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
-    .option("--project <identifier>", "Project identifier (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
     .option("--json", "Output raw JSON")
     .action(async (opts: { workspace?: string; project?: string; json?: boolean }) => {
       try {
@@ -57,8 +61,7 @@ export function createStateCommand(): Command {
         const rows = sorted.map((s) => [`  ${s.name}`, s.group, s.color]);
         printTable(rows, ["NAME", "GROUP", "COLOR"]);
       } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
+        exitWithError(err, Boolean(opts.json));
       }
     });
 

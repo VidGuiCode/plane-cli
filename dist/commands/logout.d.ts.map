@@ -1,1 +1,1 @@
-{"version":3,"file":"logout.d.ts","sourceRoot":"","sources":["../../src/commands/logout.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,MAAM,WAAW,CAAC;AAKpC,wBAAgB,mBAAmB,IAAI,OAAO,CAuC7C"}
+{"version":3,"file":"logout.d.ts","sourceRoot":"","sources":["../../src/commands/logout.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,MAAM,WAAW,CAAC;AAOpC,wBAAgB,mBAAmB,IAAI,OAAO,CA2E7C"}

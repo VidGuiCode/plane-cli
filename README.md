@@ -37,7 +37,7 @@ The web app is the right choice for visual workflows. `plane-cli` is optimized f
 Requires Node.js 20+.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.1.7/plane-cli-0.1.7.tgz
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.2.0/plane-cli-0.2.0.tgz
 ```
 
 Works on Windows, Linux, and Mac.
@@ -55,6 +55,35 @@ plane issue create             # create a new issue interactively
 
 ---
 
+## AI Start
+
+If you're a cold-start AI, use this path:
+
+```bash
+# 1. Context
+plane discover context
+
+# 2. Inputs
+plane discover issue-inputs --project <identifier-or-name>
+
+# 3. Preview
+plane issue update <ref> --state Done --dry-run
+plane issue create --title "Test" --dry-run
+
+# 4. Apply
+plane issue update <ref> --state Done --json
+plane issue create --title "Test" --json
+```
+
+**Rules:**
+- Start with `plane discover`
+- Dry-run writes first
+- Use `--no-interactive` in automation
+- Use `--compact` for smaller JSON
+- Use `--json` for structured errors
+
+---
+
 ## Commands
 
 ### Auth
@@ -63,6 +92,7 @@ plane issue create             # create a new issue interactively
 plane login                          # connect to a Plane instance (interactive or --url/--token flags)
 plane completion <shell>             # generate shell completion script (bash, zsh, or fish)
 plane logout                         # disconnect the active account
+plane profile                        # show the current authenticated user
 ```
 
 ### Account
@@ -78,6 +108,7 @@ plane account remove <name>          # remove a saved account
 
 ```bash
 plane where                          # show active account, workspace, and project
+plane discover context               # machine-readable account/workspace/project/user context
 ```
 
 ### Workspace
@@ -91,7 +122,7 @@ plane workspace use <slug>           # set the active workspace
 
 ```bash
 plane project list                   # list projects in the active workspace
-plane project use <identifier>       # set the active project
+plane project use <identifier-or-name> # set the active project
 plane project show                   # show active project details
 ```
 
@@ -118,7 +149,11 @@ Issue refs are flexible: `42` (active project), `PROJ-42` (any project), or a fu
 
 `issue list` supports filters: `--state`, `--priority`, `--assignee`
 
-`issue create` and `issue update` accept: `--title`, `--description`, `--priority`, `--state`, `--assignee`, `--label`, `--parent`, `--due`, `--start`
+`issue list` and `issue get` also support `--fields id,title,state,...` with `--json` for reduced AI payloads
+
+`issue create` accepts: `--title`, `--description`, `--priority`, `--assignee`, `--label`, `--parent`, `--due`, `--start`
+
+`issue update` accepts: `--title`, `--description`, `--priority`, `--state`, `--assignee`, `--label`, `--parent`, `--due`, `--start`
 
 ### Cycles
 
@@ -178,13 +213,32 @@ plane page delete <id>               # delete a page by UUID
 plane state list                     # list workflow states with group and color
 ```
 
+### Discover
+
+```bash
+plane discover context               # normalized account/workspace/project/user snapshot
+plane discover projects              # normalized project metadata for active workspace
+plane discover issue-inputs          # states, members, labels, cycles, modules, priorities
+plane discover states                # normalized states for a project
+plane discover members               # normalized members for a workspace
+plane discover labels                # normalized labels for a project
+plane discover cycles                # normalized cycles for a project
+plane discover modules               # normalized modules for a project
+```
+
 ### Upgrade
 
 ```bash
 plane upgrade                        # check for updates and upgrade to the latest version
 ```
 
-All commands accept `--workspace <slug>` and `--project <identifier>` flags to override active context without switching permanently. Most list commands accept `--json` for raw JSON output.
+Most commands accept `--workspace <slug>` and `--project <identifier-or-name>` flags to override active context. Most list and mutation commands accept `--json` for machine-readable output.
+
+Global AI/automation flags:
+
+- `--dry-run` — validate and resolve a mutating command without sending it
+- `--no-interactive` — fail instead of prompting for missing input
+- `--compact` — output compact JSON without indentation (saves tokens for AI)
 
 ---
 
@@ -192,13 +246,78 @@ All commands accept `--workspace <slug>` and `--project <identifier>` flags to o
 
 `plane-cli` is well suited for AI agents running inside an IDE (Claude Code, Cursor, Copilot Workspace, etc.). Because it is a plain binary, any agent that can run shell commands has full read/write access to your Plane workspace — no MCP setup, no protocol overhead.
 
+### AI-first model
+
+The recommended flow is:
+
+1. Discover context with `plane discover context`
+2. Discover valid inputs with `plane discover issue-inputs --project <identifier-or-name>`
+3. Preview changes with `--dry-run`
+4. Apply changes with `--json`
+
+Prefer `plane discover` over `where` and `profile` for new automation. `where --json` and `profile --json` remain normalized compatibility views.
+
 ```bash
 # An agent can do things like:
-plane issue list --json                        # read all issues as JSON
-plane issue create --title "Fix login bug" --priority high
-plane issue close PROJ-42
+plane discover context                         # machine-readable context (always JSON)
+plane discover issue-inputs --project <identifier-or-name>     # fetch all mutation selectors
+
+plane issue list --json                        # read issues as JSON
+plane issue list --json --fields id,title,state # compact JSON for large lists
+
+plane issue get PROJ-42 --json --fields id,title,state,labels
+
+plane issue update PROJ-42 --state Done --dry-run --json  # preview before applying
+plane issue create --title "Fix login bug" --dry-run --json
+plane issue create --title "Fix login bug" --json
+
+plane workspace use marketing --dry-run --json
+plane project use CYL --dry-run --json
+
 plane cycle issues "Sprint 3" --json
 ```
+
+### Normalized JSON schema
+
+`plane discover` commands always output normalized JSON with a consistent schema:
+
+```json
+{
+  "schemaVersion": 1,
+  "kind": "context",
+  "context": {
+    "account": { "name": "...", "baseUrl": "...", "apiStyle": "..." },
+    "workspace": { "slug": "..." },
+    "project": { "id": "...", "identifier": "...", "name": "..." },
+    "user": { "id": "...", "displayName": "...", "email": "..." }
+  }
+}
+```
+
+`plane where --json` and `plane profile --json` also follow this normalized schema (use these for compatibility, but prefer `plane discover` for new AI agents).
+
+### Safe mutation workflow
+
+Follow this pattern to avoid accidents:
+
+1. **Discover** — get context and valid inputs
+   ```bash
+   plane discover issue-inputs --project <identifier-or-name>
+   ```
+
+2. **Preview** — validate with `--dry-run`
+   ```bash
+   plane issue create --title "Test" --dry-run --json
+   ```
+
+3. **Execute** — remove `--dry-run` when ready
+   ```bash
+   plane issue create --title "Test" --json
+   ```
+
+4. **Recover** — handle errors
+   - When `--json` is used, errors are structured JSON on stderr
+   - Check exit codes: 0=success, 1=error, 2=auth, 3=validation, 4=rate limit
 
 ### CI / environment variables
 
@@ -221,6 +340,15 @@ plane issue list
 | `PLANE_CONFIG` | Path to custom config file |
 
 When both `PLANE_BASE_URL` and `PLANE_API_TOKEN` are set, no config file is needed.
+
+When `--json` is used, API failures are emitted as structured JSON on stderr so agents can recover programmatically.
+
+### JSON schema notes
+
+- `plane discover ...` always emits normalized JSON with `schemaVersion` and `kind`
+- `plane where --json` and `plane profile --json` mirror the normalized discovery shape for compatibility
+- `--compact` removes indentation from JSON output to reduce token usage
+- Dry-run output always includes `dryRun`, `method`, `path`, `body`, and `context`
 
 ---
 

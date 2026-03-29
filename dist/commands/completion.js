@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { printError } from "../core/output.js";
+import { exitWithError, ValidationError } from "../core/errors.js";
 const SUPPORTED_SHELLS = ["bash", "zsh", "fish"];
 function isSupportedShell(value) {
     return SUPPORTED_SHELLS.includes(value);
@@ -91,19 +91,20 @@ export function createCompletionCommand(program) {
         .description("Generate shell completion script")
         .argument("<shell>", `shell type (${SUPPORTED_SHELLS.join(" | ")})`)
         .action((shell) => {
-        if (!isSupportedShell(shell)) {
-            printError(`Unsupported shell: "${shell}"`);
-            printError(`Supported shells: ${SUPPORTED_SHELLS.join(", ")}`);
-            process.exit(1);
-        }
         try {
+            if (!isSupportedShell(shell)) {
+                throw new ValidationError(`Unsupported shell: "${shell}". Supported shells: ${SUPPORTED_SHELLS.join(", ")}`);
+            }
             const script = generateCompletionScript(program, shell);
             console.log(script);
         }
         catch (error) {
+            if (error instanceof ValidationError) {
+                exitWithError(error);
+                return;
+            }
             const message = error instanceof Error ? error.message : String(error);
-            printError(`Failed to generate completion script: ${message}`);
-            process.exit(1);
+            exitWithError(new Error(`Failed to generate completion script: ${message}`));
         }
     });
 }

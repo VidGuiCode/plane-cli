@@ -6,8 +6,10 @@ import {
   requireActiveWorkspace,
   requireActiveProject,
 } from "../core/config-store.js";
-import { PlaneApiError, unwrap } from "../core/api-client.js";
-import { printInfo, printError, printTable, printJson } from "../core/output.js";
+import { unwrap } from "../core/api-client.js";
+import { printInfo, printTable, printJson } from "../core/output.js";
+import { exitWithError, ValidationError } from "../core/errors.js";
+import { isDryRunEnabled } from "../core/runtime.js";
 import type { PlaneProject } from "../core/types.js";
 
 export function createProjectCommand(): Command {
@@ -47,15 +49,15 @@ export function createProjectCommand(): Command {
         ]);
         printTable(rows, ["PROJECT", "NAME", "MEMBERS", "MODULES"]);
       } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
+        exitWithError(err, Boolean(opts.json));
       }
     });
 
   command
     .command("use <project>")
     .description("Set the active project by identifier or name (e.g. CYL)")
-    .action(async (project: string) => {
+    .option("--json", "Output raw JSON")
+    .action(async (project: string, opts: { json?: boolean }) => {
       try {
         const config = loadConfig();
         const client = createClient(config);
@@ -71,24 +73,59 @@ export function createProjectCommand(): Command {
         );
 
         if (!match) {
-          printError(`Project "${project}" not found. Run: plane project list`);
-          process.exit(1);
+          throw new ValidationError(`Project "${project}" not found. Run: plane project list`);
+        }
+
+        const nextContext = {
+          activeProfile: config.context.activeProfile ?? null,
+          activeWorkspace: ws,
+          activeProject: match.id,
+          activeProjectIdentifier: match.identifier,
+        };
+
+        if (isDryRunEnabled()) {
+          printJson({
+            dryRun: true,
+            action: "project.use",
+            project: {
+              id: match.id,
+              identifier: match.identifier,
+              name: match.name,
+            },
+            nextContext,
+          });
+          return;
         }
 
         config.context.activeProject = match.id;
         config.context.activeProjectIdentifier = match.identifier;
         saveConfig(config);
+
+        if (opts.json) {
+          printJson({
+            success: true,
+            action: "project.use",
+            project: {
+              id: match.id,
+              identifier: match.identifier,
+              name: match.name,
+            },
+            context: nextContext,
+          });
+          return;
+        }
+
         printInfo(`Active project set to "${match.name}" (${match.identifier}).`);
       } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
+        exitWithError(err, Boolean(opts.json));
       }
     });
 
   command
     .command("show")
     .description("Show details of the active project")
-    .action(async () => {
+    .option("--json", "Output raw JSON")
+    .action(async (opts: { json?: boolean }) => {
       try {
         const config = loadConfig();
         const client = createClient(config);
@@ -96,14 +133,17 @@ export function createProjectCommand(): Command {
         const { id: projectId, identifier } = requireActiveProject(config);
 
         const project = await client.get<PlaneProject>(`workspaces/${ws}/projects/${projectId}/`);
+        if (opts.json) {
+          printJson(project);
+          return;
+        }
         printInfo(`${identifier}  ${project.name}`);
         printInfo(`Description: ${project.description || "-"}`);
         printInfo(`Members:     ${project.total_members}`);
         printInfo(`Modules:     ${project.total_modules}`);
         printInfo(`Cycles:      ${project.total_cycles}`);
       } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
+        exitWithError(err, Boolean(opts.json));
       }
     });
 

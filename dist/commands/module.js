@@ -1,7 +1,9 @@
 import { Command } from "commander";
 import { loadConfig, createClient, requireActiveWorkspace, requireActiveProject, } from "../core/config-store.js";
-import { PlaneApiError, unwrap, fetchAll } from "../core/api-client.js";
-import { printInfo, printError, printTable, printJson } from "../core/output.js";
+import { unwrap, fetchAll } from "../core/api-client.js";
+import { printInfo, printTable, printJson } from "../core/output.js";
+import { exitWithError } from "../core/errors.js";
+import { isDryRunEnabled } from "../core/runtime.js";
 import { resolveProject, resolveIssueRef, resolveModule, buildStateMap, resolveState, } from "../core/resolvers.js";
 export function createModuleCommand() {
     const command = new Command("module")
@@ -11,7 +13,7 @@ export function createModuleCommand() {
         .command("list")
         .description("List modules in the active (or specified) project")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
         .action(async (opts) => {
         try {
@@ -39,8 +41,7 @@ export function createModuleCommand() {
             printTable(rows, ["ID", "NAME", "STATUS"]);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── create ────────────────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ export function createModuleCommand() {
         .command("create <name>")
         .description("Create a new module in the active (or specified) project")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
         .action(async (name, opts) => {
         try {
@@ -63,7 +64,19 @@ export function createModuleCommand() {
             else {
                 projectId = requireActiveProject(config).id;
             }
-            const created = await client.post(`workspaces/${ws}/projects/${projectId}/modules/`, { name });
+            const path = `workspaces/${ws}/projects/${projectId}/modules/`;
+            const body = { name };
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "POST",
+                    path,
+                    body,
+                    context: { workspace: ws, projectId },
+                });
+                return;
+            }
+            const created = await client.post(path, body);
             if (opts.json) {
                 printJson(created);
                 return;
@@ -71,8 +84,7 @@ export function createModuleCommand() {
             printInfo(`Module "${created.name}" created.`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── add ───────────────────────────────────────────────────────────────────
@@ -80,7 +92,8 @@ export function createModuleCommand() {
         .command("add <issue> <module>")
         .description("Add an issue to a module. Issue: 42, PROJ-42, or UUID. Module: name or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, moduleRef, opts) => {
         try {
             const config = loadConfig();
@@ -100,12 +113,27 @@ export function createModuleCommand() {
             }
             const { issueId, projectId } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
             const mod = await resolveModule(client, ws, projectId, moduleRef);
-            await client.post(`workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`, { issues: [issueId] });
+            const path = `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`;
+            const body = { issues: [issueId] };
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "POST",
+                    path,
+                    body,
+                    context: { workspace: ws, projectId, issueId, moduleId: mod.id },
+                });
+                return;
+            }
+            const result = await client.post(path, body);
+            if (opts.json) {
+                printJson(result);
+                return;
+            }
             printInfo(`Issue added to module "${mod.name}".`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── issues ────────────────────────────────────────────────────────────────
@@ -113,7 +141,7 @@ export function createModuleCommand() {
         .command("issues <module>")
         .description("List issues in a module (name or UUID)")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
         .action(async (moduleRef, opts) => {
         try {
@@ -156,8 +184,7 @@ export function createModuleCommand() {
             printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── remove ────────────────────────────────────────────────────────────────
@@ -165,7 +192,8 @@ export function createModuleCommand() {
         .command("remove <issue> <module>")
         .description("Remove an issue from a module")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, moduleRef, opts) => {
         try {
             const config = loadConfig();
@@ -185,12 +213,31 @@ export function createModuleCommand() {
             }
             const { issueId, projectId } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
             const mod = await resolveModule(client, ws, projectId, moduleRef);
-            await client.delete(`workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/${issueId}/`);
+            const path = `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/${issueId}/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "DELETE",
+                    path,
+                    context: { workspace: ws, projectId, issueId, moduleId: mod.id },
+                });
+                return;
+            }
+            await client.delete(path);
+            if (opts.json) {
+                printJson({
+                    success: true,
+                    action: "module.remove",
+                    projectId,
+                    issueId,
+                    moduleId: mod.id,
+                });
+                return;
+            }
             printInfo(`Issue removed from module "${mod.name}".`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── delete ─────────────────────────────────────────────────────────────────
@@ -198,7 +245,8 @@ export function createModuleCommand() {
         .command("delete <module>")
         .description("Delete a module from the active (or specified) project")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (moduleRef, opts) => {
         try {
             const config = loadConfig();
@@ -213,12 +261,31 @@ export function createModuleCommand() {
                 projectId = requireActiveProject(config).id;
             }
             const mod = await resolveModule(client, ws, projectId, moduleRef);
-            await client.delete(`workspaces/${ws}/projects/${projectId}/modules/${mod.id}/`);
+            const path = `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "DELETE",
+                    path,
+                    context: { workspace: ws, projectId, moduleId: mod.id },
+                });
+                return;
+            }
+            await client.delete(path);
+            if (opts.json) {
+                printJson({
+                    success: true,
+                    action: "module.delete",
+                    projectId,
+                    moduleId: mod.id,
+                    name: mod.name,
+                });
+                return;
+            }
             printInfo(`Module "${mod.name}" deleted.`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     return command;

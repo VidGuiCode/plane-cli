@@ -132,6 +132,15 @@ describe("PlaneApiError", () => {
     expect(error.message).toBe("API error 404: Not found");
   });
 
+  it("should keep method, path, and details metadata", () => {
+    const error = new PlaneApiError(400, "Bad request", "POST", "issues/", {
+      request: { name: "Test" },
+    });
+    expect(error.method).toBe("POST");
+    expect(error.path).toBe("issues/");
+    expect(error.details).toEqual({ request: { name: "Test" } });
+  });
+
   it("should be instance of Error", () => {
     const error = new PlaneApiError(500, "Server error");
     expect(error).toBeInstanceOf(Error);

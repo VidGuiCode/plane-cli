@@ -1,7 +1,8 @@
 import { Command } from "commander";
 import { loadConfig, createClient, requireActiveWorkspace, requireActiveProject, } from "../core/config-store.js";
-import { PlaneApiError, unwrap } from "../core/api-client.js";
-import { printInfo, printError, printTable, printJson } from "../core/output.js";
+import { unwrap } from "../core/api-client.js";
+import { printInfo, printTable, printJson } from "../core/output.js";
+import { exitWithError } from "../core/errors.js";
 import { resolveProject } from "../core/resolvers.js";
 export function createStateCommand() {
     const command = new Command("state")
@@ -11,7 +12,7 @@ export function createStateCommand() {
         .command("list")
         .description("List workflow states in the active (or specified) project")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
         .action(async (opts) => {
         try {
@@ -43,8 +44,7 @@ export function createStateCommand() {
             printTable(rows, ["NAME", "GROUP", "COLOR"]);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     return command;

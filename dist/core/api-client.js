@@ -1,14 +1,21 @@
 export class PlaneApiError extends Error {
     status;
-    constructor(status, message) {
+    method;
+    path;
+    details;
+    constructor(status, message, method, path, details) {
         super(`API error ${status}: ${message}`);
         this.status = status;
+        this.method = method;
+        this.path = path;
+        this.details = details;
+        this.name = "PlaneApiError";
     }
 }
 export class PlaneApiRateLimitError extends PlaneApiError {
     retryAfter;
-    constructor(status, message, retryAfter) {
-        super(status, message);
+    constructor(status, message, retryAfter, method, path, details) {
+        super(status, message, method, path, details);
         this.retryAfter = retryAfter;
         this.name = "PlaneApiRateLimitError";
     }
@@ -86,7 +93,9 @@ export class PlaneApiClient {
                     // If this is the last attempt, throw rate limit error
                     if (attempt === this.maxRetries) {
                         const errorText = await res.text();
-                        throw new PlaneApiRateLimitError(res.status, errorText, retryAfter);
+                        throw new PlaneApiRateLimitError(res.status, errorText, retryAfter, options.method, path, {
+                            response: errorText,
+                        });
                     }
                     // Wait and retry
                     const delay = this.calculateDelay(attempt, retryAfter);
@@ -96,7 +105,9 @@ export class PlaneApiClient {
                 // Handle 5xx errors
                 if (attempt === this.maxRetries) {
                     const errorText = await res.text();
-                    throw new PlaneApiError(res.status, errorText);
+                    throw new PlaneApiError(res.status, errorText, options.method, path, {
+                        response: errorText,
+                    });
                 }
                 // Calculate delay with exponential backoff and jitter
                 const delay = this.calculateDelay(attempt, null);
@@ -135,8 +146,10 @@ export class PlaneApiClient {
     }
     async get(path) {
         const res = await this.fetchWithRetry(path);
-        if (!res.ok)
-            throw new PlaneApiError(res.status, await res.text());
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new PlaneApiError(res.status, errorText, "GET", path, { response: errorText });
+        }
         return res.json();
     }
     async post(path, body) {
@@ -144,8 +157,13 @@ export class PlaneApiClient {
             method: "POST",
             body: JSON.stringify(body),
         });
-        if (!res.ok)
-            throw new PlaneApiError(res.status, await res.text());
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new PlaneApiError(res.status, errorText, "POST", path, {
+                request: body,
+                response: errorText,
+            });
+        }
         return res.json();
     }
     async patch(path, body) {
@@ -153,16 +171,23 @@ export class PlaneApiClient {
             method: "PATCH",
             body: JSON.stringify(body),
         });
-        if (!res.ok)
-            throw new PlaneApiError(res.status, await res.text());
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new PlaneApiError(res.status, errorText, "PATCH", path, {
+                request: body,
+                response: errorText,
+            });
+        }
         return res.json();
     }
     async delete(path) {
         const res = await this.fetchWithRetry(path, {
             method: "DELETE",
         });
-        if (!res.ok)
-            throw new PlaneApiError(res.status, await res.text());
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new PlaneApiError(res.status, errorText, "DELETE", path, { response: errorText });
+        }
     }
 }
 export async function fetchAll(client, path) {

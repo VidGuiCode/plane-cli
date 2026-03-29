@@ -5,11 +5,13 @@ import {
   requireActiveWorkspace,
   requireActiveProject,
 } from "../core/config-store.js";
-import { PlaneApiError, fetchAll } from "../core/api-client.js";
-import { printInfo, printError, printTable, printJson } from "../core/output.js";
+import { fetchAll } from "../core/api-client.js";
+import { printInfo, printTable, printJson } from "../core/output.js";
 import { resolveProject } from "../core/resolvers.js";
 import { stripHtml } from "../core/html.js";
 import { ask } from "../core/prompt.js";
+import { exitWithError, ValidationError } from "../core/errors.js";
+import { isDryRunEnabled } from "../core/runtime.js";
 import type { PlanePage } from "../core/types.js";
 
 export function createPageCommand(): Command {
@@ -23,7 +25,10 @@ export function createPageCommand(): Command {
     .command("list")
     .description("List pages in the active (or specified) project")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
-    .option("--project <identifier>", "Project identifier (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
     .option("--json", "Output raw JSON")
     .action(async (opts: { workspace?: string; project?: string; json?: boolean }) => {
       try {
@@ -61,8 +66,7 @@ export function createPageCommand(): Command {
         ]);
         printTable(rows, ["NAME", "AUTHOR", "UPDATED"]);
       } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
+        exitWithError(err, Boolean(opts.json));
       }
     });
 
@@ -72,7 +76,10 @@ export function createPageCommand(): Command {
     .command("get <page>")
     .description("Show a page by ID")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
-    .option("--project <identifier>", "Project identifier (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
     .option("--json", "Output raw JSON")
     .action(
       async (pageId: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
@@ -110,8 +117,7 @@ export function createPageCommand(): Command {
             printInfo(content);
           }
         } catch (err) {
-          printError(err instanceof PlaneApiError ? err.message : String(err));
-          process.exit(1);
+          exitWithError(err, Boolean(opts.json));
         }
       },
     );
@@ -123,9 +129,16 @@ export function createPageCommand(): Command {
     .description("Create a new page in the active (or specified) project")
     .option("--content <text>", "Page content (optional)")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
-    .option("--project <identifier>", "Project identifier (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
+    .option("--json", "Output raw JSON")
     .action(
-      async (name: string, opts: { content?: string; workspace?: string; project?: string }) => {
+      async (
+        name: string,
+        opts: { content?: string; workspace?: string; project?: string; json?: boolean },
+      ) => {
         try {
           const config = loadConfig();
           const client = createClient(config);
@@ -145,11 +158,26 @@ export function createPageCommand(): Command {
             body.description_html = `<p>${content}</p>`;
           }
 
-          await client.post<PlanePage>(`workspaces/${ws}/projects/${projectId}/pages/`, body);
+          const path = `workspaces/${ws}/projects/${projectId}/pages/`;
+          if (isDryRunEnabled()) {
+            printJson({
+              dryRun: true,
+              method: "POST",
+              path,
+              body,
+              context: { workspace: ws, projectId },
+            });
+            return;
+          }
+
+          const page = await client.post<PlanePage>(path, body);
+          if (opts.json) {
+            printJson(page);
+            return;
+          }
           printInfo(`Page "${name}" created.`);
         } catch (err) {
-          printError(err instanceof PlaneApiError ? err.message : String(err));
-          process.exit(1);
+          exitWithError(err, Boolean(opts.json));
         }
       },
     );
@@ -162,11 +190,21 @@ export function createPageCommand(): Command {
     .option("--name <new_name>", "New name")
     .option("--content <text>", "New content")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
-    .option("--project <identifier>", "Project identifier (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
+    .option("--json", "Output raw JSON")
     .action(
       async (
         pageId: string,
-        opts: { name?: string; content?: string; workspace?: string; project?: string },
+        opts: {
+          name?: string;
+          content?: string;
+          workspace?: string;
+          project?: string;
+          json?: boolean;
+        },
       ) => {
         try {
           const config = loadConfig();
@@ -182,8 +220,7 @@ export function createPageCommand(): Command {
           }
 
           if (!opts.name && !opts.content) {
-            printError("At least one of --name or --content must be provided.");
-            process.exit(1);
+            throw new ValidationError("At least one of --name or --content must be provided.");
           }
 
           const body: { name?: string; description_html?: string } = {};
@@ -194,14 +231,26 @@ export function createPageCommand(): Command {
             body.description_html = `<p>${opts.content}</p>`;
           }
 
-          await client.patch<PlanePage>(
-            `workspaces/${ws}/projects/${projectId}/pages/${pageId}/`,
-            body,
-          );
+          const path = `workspaces/${ws}/projects/${projectId}/pages/${pageId}/`;
+          if (isDryRunEnabled()) {
+            printJson({
+              dryRun: true,
+              method: "PATCH",
+              path,
+              body,
+              context: { workspace: ws, projectId, pageId },
+            });
+            return;
+          }
+
+          const page = await client.patch<PlanePage>(path, body);
+          if (opts.json) {
+            printJson(page);
+            return;
+          }
           printInfo("Page updated.");
         } catch (err) {
-          printError(err instanceof PlaneApiError ? err.message : String(err));
-          process.exit(1);
+          exitWithError(err, Boolean(opts.json));
         }
       },
     );
@@ -212,28 +261,48 @@ export function createPageCommand(): Command {
     .command("delete <pageId>")
     .description("Delete a page by ID")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
-    .option("--project <identifier>", "Project identifier (overrides active context)")
-    .action(async (pageId: string, opts: { workspace?: string; project?: string }) => {
-      try {
-        const config = loadConfig();
-        const client = createClient(config);
-        const ws = opts.workspace ?? requireActiveWorkspace(config);
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
+    .option("--json", "Output raw JSON")
+    .action(
+      async (pageId: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
 
-        let projectId: string;
-        if (opts.project) {
-          const proj = await resolveProject(client, ws, opts.project);
-          projectId = proj.id;
-        } else {
-          projectId = requireActiveProject(config).id;
+          let projectId: string;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            projectId = proj.id;
+          } else {
+            projectId = requireActiveProject(config).id;
+          }
+
+          const path = `workspaces/${ws}/projects/${projectId}/pages/${pageId}/`;
+          if (isDryRunEnabled()) {
+            printJson({
+              dryRun: true,
+              method: "DELETE",
+              path,
+              context: { workspace: ws, projectId, pageId },
+            });
+            return;
+          }
+
+          await client.delete(path);
+          if (opts.json) {
+            printJson({ success: true, action: "page.delete", pageId, projectId, workspace: ws });
+            return;
+          }
+          printInfo("Page deleted.");
+        } catch (err) {
+          exitWithError(err, Boolean(opts.json));
         }
-
-        await client.delete(`workspaces/${ws}/projects/${projectId}/pages/${pageId}/`);
-        printInfo("Page deleted.");
-      } catch (err) {
-        printError(err instanceof PlaneApiError ? err.message : String(err));
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   return command;
 }

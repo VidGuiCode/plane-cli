@@ -1,4 +1,4 @@
-import { unwrap } from "./api-client.js";
+import { unwrap, fetchAll } from "./api-client.js";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // ── Project ──────────────────────────────────────────────────────────────────
 export async function resolveProject(client, ws, ref) {
@@ -56,8 +56,8 @@ export async function resolveIssueRef(client, ws, activeProjectId, activeProject
     return { issueId, projectId: activeProjectId, identifier: activeProjectIdentifier ?? "" };
 }
 async function findIssueBySeq(client, ws, projectId, style, seq, originalRef) {
-    const res = await client.get(`workspaces/${ws}/projects/${projectId}/${style}/?per_page=100`);
-    const issues = unwrap(res);
+    // Fetch all issues to find by sequence_id (Plane API doesn't support filtering by sequence)
+    const issues = await fetchAll(client, `workspaces/${ws}/projects/${projectId}/${style}/`);
     const found = issues.find((i) => i.sequence_id === seq);
     if (!found)
         throw new Error(`Issue ${originalRef} not found.`);
@@ -116,6 +116,9 @@ export async function resolveModule(client, ws, projectId, nameOrId) {
 }
 // ── Labels ────────────────────────────────────────────────────────────────────
 export async function resolveLabel(client, ws, projectId, nameOrColor) {
+    if (UUID_RE.test(nameOrColor)) {
+        return nameOrColor;
+    }
     const res = await client.get(`workspaces/${ws}/projects/${projectId}/labels/`);
     const labels = unwrap(res);
     const lower = nameOrColor.toLowerCase();

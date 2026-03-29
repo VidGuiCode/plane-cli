@@ -16,6 +16,8 @@ import { createCommentCommand } from "./commands/comment.js";
 import { createCycleCommand } from "./commands/cycle.js";
 import { createPageCommand } from "./commands/page.js";
 import { createStateCommand } from "./commands/state.js";
+import { createDiscoverCommand } from "./commands/discover.js";
+import { createProfileCommand } from "./commands/profile.js";
 import { createUpgradeCommand, fetchLatestVersion, isNewer } from "./commands/upgrade.js";
 import { configureHelp } from "./core/help.js";
 const require = createRequire(import.meta.url);
@@ -32,6 +34,9 @@ const program = new Command();
 program
     .name("plane")
     .description("Unofficial CLI for Plane")
+    .option("--dry-run", "Resolve and validate a mutating command without sending it")
+    .option("--no-interactive", "Fail instead of prompting for missing input")
+    .option("--compact", "Output compact JSON without indentation (for AI/agents)")
     .version(pkg.version)
     .action(async () => {
     console.log(SPLASH);
@@ -43,6 +48,7 @@ program
     if (latest && isNewer(latest, pkg.version)) {
         console.log(`  Update available v${latest}  ·  run: plane upgrade\n`);
     }
+    console.log(`  AI start: plane discover context\n`);
     program.help();
 });
 program.addCommand(createLoginCommand());
@@ -50,6 +56,7 @@ program.addCommand(createLogoutCommand());
 program.addCommand(createCompletionCommand(program));
 program.addCommand(createAccountCommand());
 program.addCommand(createWhereCommand());
+program.addCommand(createDiscoverCommand());
 program.addCommand(createMembersCommand());
 program.addCommand(createWorkspaceCommand());
 program.addCommand(createProjectCommand());
@@ -61,6 +68,7 @@ program.addCommand(createCycleCommand());
 program.addCommand(createPageCommand());
 program.addCommand(createStateCommand());
 program.addCommand(createUpgradeCommand());
+program.addCommand(createProfileCommand());
 // Apply after all commands are registered so the recursion covers every subcommand
 configureHelp(program);
 program.parseAsync(process.argv);

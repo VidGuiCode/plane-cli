@@ -1,8 +1,10 @@
 import { Command } from "commander";
 import { loadConfig, saveConfig } from "../core/config-store.js";
 import { PlaneApiClient, PlaneApiError, unwrap } from "../core/api-client.js";
-import { printError } from "../core/output.js";
+import { printJson } from "../core/output.js";
 import { ask, pickOne } from "../core/prompt.js";
+import { exitWithError, ValidationError } from "../core/errors.js";
+import { isDryRunEnabled } from "../core/runtime.js";
 import type { PlaneAccount, PlaneWorkspace, PlaneProject } from "../core/types.js";
 
 export function createLoginCommand(): Command {
@@ -11,7 +13,8 @@ export function createLoginCommand(): Command {
     .option("--url <url>", "Plane base URL (non-interactive)")
     .option("--token <token>", "API token (non-interactive)")
     .option("--api-style <style>", "API style (work-items or issues)")
-    .action(async (opts: { url?: string; token?: string; apiStyle?: string }) => {
+    .option("--json", "Output raw JSON")
+    .action(async (opts: { url?: string; token?: string; apiStyle?: string; json?: boolean }) => {
       try {
         const config = loadConfig();
 
@@ -21,8 +24,7 @@ export function createLoginCommand(): Command {
         if (opts.url || opts.token) {
           // Non-interactive fast path — both flags required together
           if (!opts.url || !opts.token) {
-            printError("Provide both --url and --token for non-interactive login.");
-            process.exit(1);
+            throw new ValidationError("Provide both --url and --token for non-interactive login.");
           }
           baseUrl = opts.url;
           token = opts.token;
@@ -51,12 +53,10 @@ export function createLoginCommand(): Command {
         }
 
         if (!baseUrl) {
-          printError("Base URL is required.");
-          process.exit(1);
+          throw new ValidationError("Base URL is required.");
         }
         if (!token) {
-          printError("Token is required.");
-          process.exit(1);
+          throw new ValidationError("Token is required.");
         }
 
         const tempClient = new PlaneApiClient({ baseUrl, token, apiStyle: "issues" });
@@ -66,12 +66,11 @@ export function createLoginCommand(): Command {
         try {
           await tempClient.get<unknown>("users/me/");
         } catch (err) {
-          printError(
+          throw new ValidationError(
             err instanceof PlaneApiError
               ? `Failed to connect: ${err.message}`
               : "Failed to connect. Check your base URL and token.",
           );
-          process.exit(1);
         }
 
         let workspaces: PlaneWorkspace[] = [];
@@ -103,8 +102,7 @@ export function createLoginCommand(): Command {
         } else {
           workspaceSlug = await ask("Workspace slug (found in your Plane URL)");
           if (!workspaceSlug) {
-            printError("Workspace slug is required.");
-            process.exit(1);
+            throw new ValidationError("Workspace slug is required.");
           }
         }
 
@@ -113,8 +111,9 @@ export function createLoginCommand(): Command {
         if (opts.apiStyle === "issues" || opts.apiStyle === "work-items") {
           apiStyle = opts.apiStyle;
         } else if (opts.apiStyle) {
-          printError(`Invalid --api-style: ${opts.apiStyle}. Use "issues" or "work-items".`);
-          process.exit(1);
+          throw new ValidationError(
+            `Invalid --api-style: ${opts.apiStyle}. Use "issues" or "work-items".`,
+          );
         } else {
           apiStyle = await detectApiStyle(tempClient, workspaceSlug);
         }
@@ -144,14 +143,40 @@ export function createLoginCommand(): Command {
         delete config.context.activeProject;
         delete config.context.activeProjectIdentifier;
 
+        const result = {
+          success: true,
+          action: "login",
+          account: {
+            name: accountName,
+            baseUrl,
+            apiStyle,
+            defaultWorkspace: workspaceSlug,
+          },
+          context: {
+            activeProfile: accountName,
+            activeWorkspace: workspaceSlug,
+            activeProject: null,
+            activeProjectIdentifier: null,
+          },
+        };
+
+        if (isDryRunEnabled()) {
+          printJson({ dryRun: true, ...result });
+          return;
+        }
+
         saveConfig(config);
+
+        if (opts.json) {
+          printJson(result);
+          return;
+        }
 
         console.log(`\nAccount "${accountName}" saved.`);
         console.log(`Active workspace: ${workspaceSlug}`);
         console.log(`API style: ${apiStyle}`);
       } catch (err) {
-        printError(`Login failed: ${err instanceof Error ? err.message : err}`);
-        process.exit(1);
+        exitWithError(err, Boolean(opts.json));
       }
     });
 }

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0
+
+### AI and automation
+- Added `plane discover` as the canonical AI-first discovery surface
+- Added `plane discover context`, `plane discover projects`, and `plane discover issue-inputs`
+- Added normalized discovery commands for states, members, labels, cycles, and modules
+- Added `plane profile` and normalized `plane where --json` output
+- Added global `--dry-run`, `--no-interactive`, and `--compact` flags
+- Added structured JSON error output for JSON-aware workflows
+- Added dry-run JSON payload output for issue, comment, page, label, module, cycle, account, project, workspace, login, logout, and issue-open flows
+- Added `--json` coverage to more mutating and local-context commands
+- Added `--fields` support to `plane issue list` and `plane issue get` for reduced JSON payloads
+- Fixed short issue reference resolution so it pages through all issues instead of stopping at 100
+- Documented the AI cold-start workflow in README and mirrored it in the `context/` notes
+- Promoted `discover` in CLI help and added a bare `plane` AI start hint
+
 ## 0.1.7
 
 ### New Commands

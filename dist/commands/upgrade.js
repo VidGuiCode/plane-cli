@@ -1,7 +1,8 @@
 import { Command } from "commander";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { printInfo, printError } from "../core/output.js";
+import { printInfo } from "../core/output.js";
+import { exitWithError } from "../core/errors.js";
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json");
 const REPO_RAW = "https://raw.githubusercontent.com/VidGuiCode/plane-cli/main/package.json";
@@ -34,8 +35,7 @@ export function createUpgradeCommand() {
         printInfo("Checking for updates...");
         const latest = await fetchLatestVersion();
         if (!latest) {
-            printError("Could not reach GitHub to check for updates.");
-            process.exit(1);
+            exitWithError(new Error("Could not reach GitHub to check for updates."));
         }
         printInfo(`Current version : v${pkg.version}`);
         printInfo(`Latest version  : v${latest}`);
@@ -51,8 +51,7 @@ export function createUpgradeCommand() {
             shell: true,
         });
         if (result.status !== 0) {
-            printError(`Upgrade failed. Try running manually: npm install -g ${tarballUrl}`);
-            process.exit(1);
+            exitWithError(new Error(`Upgrade failed. Try running manually: npm install -g ${tarballUrl}`));
         }
         console.log("");
         printInfo(`Upgraded to v${latest}.`);

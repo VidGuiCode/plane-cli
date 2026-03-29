@@ -1,1 +1,1 @@
-{"version":3,"file":"workspace.d.ts","sourceRoot":"","sources":["../../src/commands/workspace.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,MAAM,WAAW,CAAC;AAWpC,wBAAgB,sBAAsB,IAAI,OAAO,CAmEhD"}
+{"version":3,"file":"workspace.d.ts","sourceRoot":"","sources":["../../src/commands/workspace.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,MAAM,WAAW,CAAC;AAapC,wBAAgB,sBAAsB,IAAI,OAAO,CAuGhD"}

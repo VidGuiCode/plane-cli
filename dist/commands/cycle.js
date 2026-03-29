@@ -1,7 +1,9 @@
 import { Command } from "commander";
 import { loadConfig, createClient, requireActiveWorkspace, requireActiveProject, } from "../core/config-store.js";
-import { PlaneApiError, unwrap, fetchAll } from "../core/api-client.js";
-import { printInfo, printError, printTable, printJson } from "../core/output.js";
+import { unwrap, fetchAll } from "../core/api-client.js";
+import { printInfo, printTable, printJson } from "../core/output.js";
+import { exitWithError } from "../core/errors.js";
+import { isDryRunEnabled } from "../core/runtime.js";
 import { resolveProject, resolveIssueRef, resolveCycle, buildStateMap, resolveState, } from "../core/resolvers.js";
 export function createCycleCommand() {
     const command = new Command("cycle")
@@ -12,7 +14,7 @@ export function createCycleCommand() {
         .command("list")
         .description("List cycles in the active (or specified) project")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
         .action(async (opts) => {
         try {
@@ -45,8 +47,7 @@ export function createCycleCommand() {
             printTable(rows, ["NAME", "STATUS", "START", "END"]);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── issues ────────────────────────────────────────────────────────────────
@@ -54,7 +55,7 @@ export function createCycleCommand() {
         .command("issues <cycle>")
         .description("List issues in a cycle (name or UUID)")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
         .action(async (cycleRef, opts) => {
         try {
@@ -97,8 +98,7 @@ export function createCycleCommand() {
             printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── add ───────────────────────────────────────────────────────────────────
@@ -106,7 +106,8 @@ export function createCycleCommand() {
         .command("add <issue> <cycle>")
         .description("Add an issue to a cycle. Issue: 42, PROJ-42, or UUID. Cycle: name or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, cycleRef, opts) => {
         try {
             const config = loadConfig();
@@ -126,12 +127,27 @@ export function createCycleCommand() {
             }
             const { issueId, projectId } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
             const cycle = await resolveCycle(client, ws, projectId, cycleRef);
-            await client.post(`workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/issues/`, { issues: [issueId] });
+            const path = `workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/issues/`;
+            const body = { issues: [issueId] };
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "POST",
+                    path,
+                    body,
+                    context: { workspace: ws, projectId, issueId, cycleId: cycle.id },
+                });
+                return;
+            }
+            const result = await client.post(path, body);
+            if (opts.json) {
+                printJson(result);
+                return;
+            }
             printInfo(`Issue added to cycle "${cycle.name}".`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── remove ────────────────────────────────────────────────────────────────
@@ -139,7 +155,8 @@ export function createCycleCommand() {
         .command("remove <issue> <cycle>")
         .description("Remove an issue from a cycle")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (issueRef, cycleRef, opts) => {
         try {
             const config = loadConfig();
@@ -159,12 +176,31 @@ export function createCycleCommand() {
             }
             const { issueId, projectId } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
             const cycle = await resolveCycle(client, ws, projectId, cycleRef);
-            await client.delete(`workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/issues/${issueId}/`);
+            const path = `workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/issues/${issueId}/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "DELETE",
+                    path,
+                    context: { workspace: ws, projectId, issueId, cycleId: cycle.id },
+                });
+                return;
+            }
+            await client.delete(path);
+            if (opts.json) {
+                printJson({
+                    success: true,
+                    action: "cycle.remove",
+                    projectId,
+                    issueId,
+                    cycleId: cycle.id,
+                });
+                return;
+            }
             printInfo(`Issue removed from cycle "${cycle.name}".`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── create ─────────────────────────────────────────────────────────────────
@@ -174,7 +210,7 @@ export function createCycleCommand() {
         .option("--start <date>", "Start date (YYYY-MM-DD)")
         .option("--end <date>", "End date (YYYY-MM-DD)")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
         .action(async (name, opts) => {
         try {
@@ -194,7 +230,18 @@ export function createCycleCommand() {
                 body.start_date = opts.start;
             if (opts.end)
                 body.end_date = opts.end;
-            const created = await client.post(`workspaces/${ws}/projects/${projectId}/cycles/`, body);
+            const path = `workspaces/${ws}/projects/${projectId}/cycles/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "POST",
+                    path,
+                    body,
+                    context: { workspace: ws, projectId },
+                });
+                return;
+            }
+            const created = await client.post(path, body);
             if (opts.json) {
                 printJson(created);
             }
@@ -203,8 +250,7 @@ export function createCycleCommand() {
             }
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     // ── delete ─────────────────────────────────────────────────────────────────
@@ -212,7 +258,8 @@ export function createCycleCommand() {
         .command("delete <cycle>")
         .description("Delete a cycle (name or UUID)")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier>", "Project identifier (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
         .action(async (cycleRef, opts) => {
         try {
             const config = loadConfig();
@@ -227,12 +274,31 @@ export function createCycleCommand() {
                 projectId = requireActiveProject(config).id;
             }
             const cycle = await resolveCycle(client, ws, projectId, cycleRef);
-            await client.delete(`workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/`);
+            const path = `workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "DELETE",
+                    path,
+                    context: { workspace: ws, projectId, cycleId: cycle.id },
+                });
+                return;
+            }
+            await client.delete(path);
+            if (opts.json) {
+                printJson({
+                    success: true,
+                    action: "cycle.delete",
+                    projectId,
+                    cycleId: cycle.id,
+                    name: cycle.name,
+                });
+                return;
+            }
             printInfo(`Cycle "${cycle.name}" deleted successfully.`);
         }
         catch (err) {
-            printError(err instanceof PlaneApiError ? err.message : String(err));
-            process.exit(1);
+            exitWithError(err, Boolean(opts.json));
         }
     });
     return command;

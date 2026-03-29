@@ -7,11 +7,14 @@ export interface PlaneClientOptions {
 }
 export declare class PlaneApiError extends Error {
     readonly status: number;
-    constructor(status: number, message: string);
+    readonly method?: string | undefined;
+    readonly path?: string | undefined;
+    readonly details?: unknown | undefined;
+    constructor(status: number, message: string, method?: string | undefined, path?: string | undefined, details?: unknown | undefined);
 }
 export declare class PlaneApiRateLimitError extends PlaneApiError {
     readonly retryAfter: number | null;
-    constructor(status: number, message: string, retryAfter: number | null);
+    constructor(status: number, message: string, retryAfter: number | null, method?: string, path?: string, details?: unknown);
 }
 export declare class PlaneApiClient {
     private readonly options;

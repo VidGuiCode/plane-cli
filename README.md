@@ -420,6 +420,12 @@ This is disclosed upfront so there is no confusion about how the project was bui
 
 ---
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned features and improvements.
+
+---
+
 ## License
 
 [MIT](LICENSE) — use freely, modify freely, redistribute freely.

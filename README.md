@@ -422,7 +422,7 @@ This is disclosed upfront so there is no confusion about how the project was bui
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for planned features and improvements.
+See [docs/roadmap.md](docs/roadmap.md) for planned features and improvements.
 
 ---
 

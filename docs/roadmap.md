@@ -1,84 +1,30 @@
 # Roadmap
 
-## v0.2.0 — Current Release (Complete)
-
-### AI-first additions
-- `plane discover context`
-- `plane discover issue-inputs`
-- normalized `plane where --json` and `plane profile --json`
-- global `--dry-run`, `--no-interactive`, and `--compact`
-- `plane issue list/get --fields ...`
-
-### Account and auth
-- `plane login` — interactive + non-interactive (`--url`/`--token` flags, `--api-style`)
-- `plane logout`
-- `plane completion <shell>` — shell completions for bash, zsh, fish
-- `plane account list/use/show/remove`
-- `plane where` — active context display
-
-### Workspace and project
-- `plane workspace list/use`
-- `plane project list/use/show`
-- `plane members list`
-
-### Issues
-- `plane issue list` — with `--state`, `--priority`, `--assignee` filters
-- `plane issue get` — description, parent, assignees, labels, dates
-- `plane issue create` — with `--assignee`, `--label`, `--parent`, `--due`, `--start`
-- `plane issue update` — all fields
-- `plane issue delete`
-- `plane issue close` / `plane issue reopen`
-- `plane issue open <ref>` — open issue URL in browser
-
-### Modules
-- `plane module list/add/issues/remove`
-- `plane module create <name>` — create a new module
-- `plane module delete <module>` — delete a module
-
-### Labels
-- `plane label list/create/delete/add/remove`
-- `plane label update <label>` — update label name/color
-
-### Comments
-- `plane comment list/add/delete`
-- `plane comment update <id> <issue>` — update an existing comment
-
-### Cycles
-- `plane cycle list/issues/add/remove`
-- `plane cycle create <name>` — create a new cycle
-- `plane cycle delete <cycle>` — delete a cycle
-
-### Pages
-- `plane page list/get`
-- `plane page create <name>` — create a new page
-- `plane page update <id>` — update an existing page
-- `plane page delete <id>` — delete a page
-
-### States
-- `plane state list`
-
-### Upgrade
-- `plane upgrade` — check for updates and upgrade in one command; passive update hint on splash banner
-
-### Infrastructure
-- Cursor-based pagination on all list endpoints
-- `--json` flag on all list and get commands
-- `--workspace` / `--project` override flags on all commands
-- Env var support: `PLANE_BASE_URL`, `PLANE_API_TOKEN`, `PLANE_WORKSPACE`, `PLANE_API_STYLE`, `PLANE_CONFIG`
-- Both `issues` and `work-items` API styles supported (self-hosted + Plane Cloud)
-- API style auto-detection with fallback (work-items first, issues fallback)
-- Custom help formatter with section rules
-- Visual table output with headers and `─` separators
-- Retry logic and rate limiting (exponential backoff, respects `Retry-After`)
-- ESLint + Prettier configuration
-- Unit tests for core modules
+Planned improvements and features for upcoming releases. This is a living document - items may shift between releases or be dropped based on usage and feedback.
 
 ---
 
-## Potential next steps
+## v0.2.5
 
-- **Bulk operations** — `plane issue bulk-update --state closed 42,43,44`
-- **`plane init`** — guided first-time setup wizard
-- **Inbox/Intake** — `plane inbox list/create/delete`
-- **Issue Links** — `plane issue link <from> <to> --type blocks`
-- **Time Tracking** — `plane issue time add <ref> <hours>`
+### Features
+
+- **`--assignee me`** - resolve the special token `me` to the current authenticated user so `plane issue list --assignee me` works without knowing your own email
+- **`plane issue mine`** - shortcut for listing issues assigned to the current user
+- **`plane cycle current`** - show the active/in-progress cycle and its issues
+- **`plane issue list --updated-since <date>`** - filter issues by last-updated date, useful for "what changed today" in CI and AI workflows
+
+### Reliability
+
+- **Post-pack release verification** - install the `.tgz` into a temp directory and run smoke tests against the installed binary before publishing, to catch version mismatches or broken dist files before they reach users
+
+### Output consistency
+
+- **Normalize `--json` passthrough output** on `issue list`, `cycle issues`, and `module issues` to return camelCase resolved fields (state name, identifier string) instead of raw API shapes, closing the gap between `--json` and `--json --fields`
+
+### Error messages
+
+- **Better diagnostics on auth failures and 404s** - surface which part of the resolution failed (workspace / project / issue number) so failures are actionable rather than cryptic
+
+---
+
+Items beyond v0.2.5 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).

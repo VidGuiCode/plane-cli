@@ -44,7 +44,7 @@
 - Added `--json` coverage to more mutating and local-context commands
 - Added `--fields` support to `plane issue list` and `plane issue get` for reduced JSON payloads
 - Fixed short issue reference resolution so it pages through all issues instead of stopping at 100
-- Documented the AI cold-start workflow in README and mirrored it in the `context/` notes
+- Documented the AI cold-start workflow in README
 - Promoted `discover` in CLI help and added a bare `plane` AI start hint
 
 ## 0.1.7

@@ -789,21 +789,6 @@ function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 
-// Maps raw API field names and common aliases → normalized field names in the projected output.
-// Lets AI agents use either the raw Plane API names (snake_case) or the normalized names.
-const FIELD_ALIASES: Record<string, string> = {
-  name: "title",
-  sequence_id: "sequence",
-  state_id: "state",
-  state_name: "state",
-  project_id: "projectId",
-  updated_at: "updatedAt",
-  created_at: "createdAt",
-  due_date: "dueDate",
-  start_date: "startDate",
-  label_ids: "labels",
-};
-
 function projectIssue(
   issue: PlaneIssue,
   stateMap: Map<string, string>,
@@ -811,24 +796,35 @@ function projectIssue(
   fieldsCsv: string,
   projectId: string,
 ): Record<string, unknown> {
+  // Split on commas OR spaces so the value works whether or not the shell
+  // (e.g. PowerShell) splits a bare `id,name,title` into separate arguments.
   const requested = fieldsCsv
-    .split(",")
-    .map((field) => field.trim())
+    .split(/[,\s]+/)
+    .map((f) => f.trim())
     .filter(Boolean);
 
+  const stateName = resolveState(issue, stateMap);
+  const labelNames = (issue.labels ?? []).map((label) =>
+    typeof label === "object" && "name" in label ? label.name : String(label),
+  );
+
+  // Build lookup from ALL raw issue fields first, then layer normalized aliases
+  // on top. This means any field the API returns (id, name, priority, assignees,
+  // sequence_id, updated_at, …) is accessible by its exact API name, AND the
+  // camelCase aliases also work.
   const full: Record<string, unknown> = {
-    id: issue.id,
+    ...(issue as unknown as Record<string, unknown>),
+    // computed / normalized fields (both raw-name and camelCase forms)
+    project_id: projectId,
     projectId,
     identifier: `${identifier}-${issue.sequence_id}`,
     sequence: issue.sequence_id,
-    title: issue.name,
-    state: resolveState(issue, stateMap),
-    priority: issue.priority,
-    assignees: issue.assignees ?? [],
-    labels: (issue.labels ?? []).map((label) =>
-      typeof label === "object" && "name" in label ? label.name : String(label),
-    ),
-    parent: issue.parent ?? null,
+    title: issue.name,          // 'name' already comes from spread; 'title' is alias
+    state: stateName,
+    state_name: stateName,
+    state_id: typeof issue.state === "string" ? issue.state : null,
+    labels: labelNames,
+    label_ids: labelNames,
     dueDate: issue.due_date ?? null,
     startDate: issue.start_date ?? null,
     createdAt: issue.created_at,
@@ -837,8 +833,7 @@ function projectIssue(
   };
 
   return requested.reduce<Record<string, unknown>>((acc, field) => {
-    const key = FIELD_ALIASES[field] ?? field;
-    if (key in full) acc[field] = full[key];
+    if (field in full) acc[field] = full[field];
     return acc;
   }, {});
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+### Bug fixes
+- Fixed `plane issue list --fields` and `plane issue get --fields` returning empty objects `{}` for every issue — the raw Plane API fields (`id`, `name`, `priority`, `assignees`, `sequence_id`, `updated_at`, etc.) were not accessible by their exact API names because the projection only checked a curated alias map; all raw issue fields are now spread directly into the projection lookup so any field the API returns can be requested by its exact name
+- Fixed `--fields` failing when the shell (e.g. PowerShell) splits a comma-separated list like `id,name,title` into separate arguments; the parser now splits on both commas and whitespace so the value is correctly reassembled regardless of how the shell passes it
+
 ## 0.2.3
 
 ### Bug fixes

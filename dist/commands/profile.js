@@ -41,7 +41,6 @@ export function createProfileCommand() {
                             firstName: user.first_name ?? null,
                             lastName: user.last_name ?? null,
                             isActive: user.is_active ?? null,
-                            role: user.role ?? null,
                         },
                     },
                 });
@@ -49,8 +48,7 @@ export function createProfileCommand() {
             else {
                 printInfo(`User:       ${user.display_name} (${user.email})`);
                 printInfo(`ID:         ${user.id}`);
-                printInfo(`Status:     ${user.is_active ? "Active" : "Inactive"}`);
-                printInfo(`Role:       ${user.role}`);
+                printInfo(`Status:     ${user.is_active === false ? "Inactive" : "Active"}`);
             }
         }
         catch (err) {

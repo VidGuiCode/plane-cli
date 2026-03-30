@@ -197,10 +197,13 @@ export async function fetchAll(client, path) {
     while (true) {
         const res = await client.get(url);
         results.push(...unwrap(res));
+        const hasMore = res && typeof res === "object" && "next_page_results" in res
+            ? Boolean(res.next_page_results)
+            : false;
         const cursor = res && typeof res === "object" && "next_cursor" in res
             ? res.next_cursor
             : null;
-        if (cursor) {
+        if (hasMore && cursor) {
             url = `${path}${sep}per_page=100&cursor=${encodeURIComponent(cursor)}`;
         }
         else {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1
+
+### Bug fixes
+- Fixed infinite pagination loop that caused `plane discover projects`, `plane issue list`, and all `plane discover` sub-commands to hang indefinitely — Plane API always returns a `next_cursor` even on the last page; the loop now correctly checks `next_page_results` to stop
+- Fixed `plane issue list --assignee` crashing with `TypeError: Cannot read properties of undefined (reading 'toLowerCase')` — newer Plane instances return workspace members as a nested `member` object (`member.display_name`, `member.email`) rather than flat `member__display_name`/`member__email` fields; both formats are now handled transparently
+- Fixed `plane members list` showing `undefined` for name and email columns — same nested vs flat member format issue
+- Fixed `plane discover members` and `plane discover issue-inputs` emitting `undefined` for `displayName`/`email` fields — same root cause
+- Fixed `plane help` failing with "too many arguments. Expected 0 arguments but got 1" — Commander.js v13 suppresses the implicit `help` subcommand when `.action()` is registered on the root command; explicitly re-enabled with `.helpCommand(true)`
+- Fixed `plane profile` showing `Status: Inactive` for active users — `is_active` is not always present in the `/users/me/` response; `undefined` now defaults to Active instead of Inactive
+- Fixed `plane profile` showing `Role: undefined` — `/users/me/` does not return a role (it is workspace-scoped); removed the Role line from plain-text output and from the JSON shape
+- Fixed `resolveMember` returning the workspace membership UUID instead of the user UUID on newer API — `member.id` (user UUID) is now preferred over the top-level `id` (membership record UUID) for issue assignee filtering
+
 ## 0.2.0
 
 ### AI and automation

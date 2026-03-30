@@ -12,6 +12,7 @@ import {
   fetchProjects,
   resolveProjectContext,
 } from "../core/discovery.js";
+import { getMemberDisplayName, getMemberEmail } from "../core/resolvers.js";
 import { printJson } from "../core/output.js";
 
 const PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
@@ -215,8 +216,8 @@ export function createDiscoverCommand(): Command {
             })),
             members: inputs.members.map((member) => ({
               id: member.id,
-              displayName: member.member__display_name,
-              email: member.member__email ?? null,
+              displayName: getMemberDisplayName(member),
+              email: getMemberEmail(member) ?? null,
               role: member.role,
             })),
             labels: inputs.labels.map((label) => ({
@@ -276,8 +277,8 @@ export function createDiscoverCommand(): Command {
               },
               items: members.map((member) => ({
                 id: member.id,
-                displayName: member.member__display_name,
-                email: member.member__email ?? null,
+                displayName: getMemberDisplayName(member),
+                email: getMemberEmail(member) ?? null,
                 role: member.role,
               })),
             });

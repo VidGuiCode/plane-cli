@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { createClient, getActiveAccount, loadConfig, requireActiveWorkspace, } from "../core/config-store.js";
 import { exitWithError } from "../core/errors.js";
 import { fetchIssueInputOptions, fetchMembers, fetchProjects, resolveProjectContext, } from "../core/discovery.js";
+import { getMemberDisplayName, getMemberEmail } from "../core/resolvers.js";
 import { printJson } from "../core/output.js";
 const PRIORITIES = ["urgent", "high", "medium", "low", "none"];
 export function createDiscoverCommand() {
@@ -183,8 +184,8 @@ export function createDiscoverCommand() {
                     })),
                     members: inputs.members.map((member) => ({
                         id: member.id,
-                        displayName: member.member__display_name,
-                        email: member.member__email ?? null,
+                        displayName: getMemberDisplayName(member),
+                        email: getMemberEmail(member) ?? null,
                         role: member.role,
                     })),
                     labels: inputs.labels.map((label) => ({
@@ -240,8 +241,8 @@ export function createDiscoverCommand() {
                         },
                         items: members.map((member) => ({
                             id: member.id,
-                            displayName: member.member__display_name,
-                            email: member.member__email ?? null,
+                            displayName: getMemberDisplayName(member),
+                            email: getMemberEmail(member) ?? null,
                             role: member.role,
                         })),
                     });

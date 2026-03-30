@@ -254,12 +254,17 @@ export async function fetchAll<T>(client: PlaneApiClient, path: string): Promise
     const res = await client.get<unknown>(url);
     results.push(...unwrap<T>(res));
 
+    const hasMore: boolean =
+      res && typeof res === "object" && "next_page_results" in res
+        ? Boolean((res as { next_page_results?: boolean }).next_page_results)
+        : false;
+
     const cursor: string | null | undefined =
       res && typeof res === "object" && "next_cursor" in res
         ? (res as { next_cursor?: string | null }).next_cursor
         : null;
 
-    if (cursor) {
+    if (hasMore && cursor) {
       url = `${path}${sep}per_page=100&cursor=${encodeURIComponent(cursor)}`;
     } else {
       break;

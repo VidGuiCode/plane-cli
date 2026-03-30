@@ -136,6 +136,24 @@ export function resolveState(issue: PlaneIssue, stateMap: Map<string, string>): 
 
 // ── Members ───────────────────────────────────────────────────────────────────
 
+/** Extract display name from either flat or nested Plane API member format. */
+export function getMemberDisplayName(m: PlaneMember): string {
+  return m.member__display_name ?? m.member?.display_name ?? "";
+}
+
+/** Extract email from either flat or nested Plane API member format. */
+export function getMemberEmail(m: PlaneMember): string | undefined {
+  return m.member__email ?? m.member?.email;
+}
+
+/**
+ * Returns the user UUID suitable for issue assignee filtering.
+ * Prefers nested member.id (new API) over top-level id (old API where id was the user UUID).
+ */
+export function getMemberId(m: PlaneMember): string {
+  return m.member?.id ?? m.id;
+}
+
 export async function resolveMember(
   client: PlaneApiClient,
   ws: string,
@@ -146,11 +164,11 @@ export async function resolveMember(
   const lower = nameOrEmail.toLowerCase();
   const match = members.find(
     (m) =>
-      m.member__display_name.toLowerCase() === lower ||
-      (m.member__email?.toLowerCase() ?? "") === lower,
+      getMemberDisplayName(m).toLowerCase() === lower ||
+      (getMemberEmail(m)?.toLowerCase() ?? "") === lower,
   );
   if (!match) throw new Error(`Member "${nameOrEmail}" not found. Run: plane members list`);
-  return match.id;
+  return getMemberId(match);
 }
 
 // ── Cycles ────────────────────────────────────────────────────────────────────

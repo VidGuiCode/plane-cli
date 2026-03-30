@@ -3,6 +3,7 @@ import { loadConfig, createClient, requireActiveWorkspace } from "../core/config
 import { fetchAll } from "../core/api-client.js";
 import { printInfo, printTable, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
+import { getMemberDisplayName, getMemberEmail } from "../core/resolvers.js";
 const ROLE_NAMES = {
     5: "Owner",
     10: "Admin",
@@ -33,8 +34,8 @@ export function createMembersCommand() {
                 return;
             }
             const rows = members.map((m) => [
-                `  ${m.member__display_name}`,
-                m.member__email ?? "",
+                `  ${getMemberDisplayName(m)}`,
+                getMemberEmail(m) ?? "",
                 ROLE_NAMES[m.role] ?? String(m.role),
             ]);
             printTable(rows, ["NAME", "EMAIL", "ROLE"]);

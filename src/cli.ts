@@ -42,6 +42,7 @@ program
   .option("--no-interactive", "Fail instead of prompting for missing input")
   .option("--compact", "Output compact JSON without indentation (for AI/agents)")
   .version(pkg.version)
+  .helpCommand(true) // Commander.js v13: action() suppresses implicit help command; re-enable it
   .action(async () => {
     console.log(SPLASH);
     // Silent update check — 1.5s timeout so it never blocks

@@ -74,8 +74,14 @@ export interface PlaneLabel {
 }
 export interface PlaneMember {
     id: string;
-    member__display_name: string;
+    member__display_name?: string;
     member__email?: string;
+    member?: {
+        id: string;
+        display_name: string;
+        email?: string;
+        avatar?: string;
+    };
     role: number;
 }
 export interface PlaneCycle {

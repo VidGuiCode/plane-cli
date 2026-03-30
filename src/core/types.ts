@@ -83,8 +83,16 @@ export interface PlaneLabel {
 
 export interface PlaneMember {
   id: string;
-  member__display_name: string;
+  // Flat format (older Plane API)
+  member__display_name?: string;
   member__email?: string;
+  // Nested format (newer Plane API)
+  member?: {
+    id: string;
+    display_name: string;
+    email?: string;
+    avatar?: string;
+  };
   role: number; // 5=Owner 10=Admin 15=Member 20=Viewer
 }
 

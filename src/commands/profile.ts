@@ -15,11 +15,10 @@ export function createProfileCommand(): Command {
         const user = await client.get<{
           id: string;
           email: string;
-          first_name: string;
-          last_name: string;
+          first_name?: string;
+          last_name?: string;
           display_name: string;
-          is_active: boolean;
-          role: number;
+          is_active?: boolean;
         }>("users/me/");
 
         if (opts.json) {
@@ -51,15 +50,13 @@ export function createProfileCommand(): Command {
                 firstName: user.first_name ?? null,
                 lastName: user.last_name ?? null,
                 isActive: user.is_active ?? null,
-                role: user.role ?? null,
               },
             },
           });
         } else {
           printInfo(`User:       ${user.display_name} (${user.email})`);
           printInfo(`ID:         ${user.id}`);
-          printInfo(`Status:     ${user.is_active ? "Active" : "Inactive"}`);
-          printInfo(`Role:       ${user.role}`);
+          printInfo(`Status:     ${user.is_active === false ? "Inactive" : "Active"}`);
         }
       } catch (err) {
         exitWithError(err, Boolean(opts.json));

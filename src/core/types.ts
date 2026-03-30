@@ -83,16 +83,14 @@ export interface PlaneLabel {
 
 export interface PlaneMember {
   id: string;
-  // Flat format (older Plane API)
+  // Top-level fields — most Plane API versions (member is a string UUID in this layout)
+  display_name?: string;
+  email?: string;
+  // Double-underscore annotation format — some older Plane API versions
   member__display_name?: string;
   member__email?: string;
-  // Nested format (newer Plane API)
-  member?: {
-    id: string;
-    display_name: string;
-    email?: string;
-    avatar?: string;
-  };
+  // Nested member object — some Plane API versions
+  member?: string | { id: string; display_name: string; email?: string };
   role: number; // 5=Owner 10=Admin 15=Member 20=Viewer
 }
 

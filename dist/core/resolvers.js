@@ -78,20 +78,37 @@ export function resolveState(issue, stateMap) {
     return "-";
 }
 // ── Members ───────────────────────────────────────────────────────────────────
-/** Extract display name from either flat or nested Plane API member format. */
+/** Extract display name — handles all known Plane API member shapes. */
 export function getMemberDisplayName(m) {
-    return m.member__display_name ?? m.member?.display_name ?? "";
+    // Double-underscore annotation format (older Plane)
+    if (m.member__display_name)
+        return m.member__display_name;
+    // Nested member object format
+    if (m.member && typeof m.member === "object")
+        return m.member.display_name;
+    // Top-level flat format (most current Plane versions, member field is a UUID string)
+    if (m.display_name)
+        return m.display_name;
+    return "";
 }
-/** Extract email from either flat or nested Plane API member format. */
+/** Extract email — handles all known Plane API member shapes. */
 export function getMemberEmail(m) {
-    return m.member__email ?? m.member?.email;
+    if (m.member__email)
+        return m.member__email;
+    if (m.member && typeof m.member === "object")
+        return m.member.email;
+    return m.email;
 }
 /**
- * Returns the user UUID suitable for issue assignee filtering.
- * Prefers nested member.id (new API) over top-level id (old API where id was the user UUID).
+ * Returns the user UUID for issue assignee filtering.
+ * Nested object → member.id; string member field → that string; fallback → top-level id.
  */
 export function getMemberId(m) {
-    return m.member?.id ?? m.id;
+    if (m.member && typeof m.member === "object")
+        return m.member.id;
+    if (typeof m.member === "string")
+        return m.member;
+    return m.id;
 }
 export async function resolveMember(client, ws, nameOrEmail) {
     const res = await client.get(`workspaces/${ws}/members/`);

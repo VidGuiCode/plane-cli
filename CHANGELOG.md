@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+### Bug fixes
+- Fixed `plane members list` still showing blank NAME and EMAIL columns after 0.2.1 — the most common Plane API format returns members with top-level `display_name` and `email` fields (and `member` as a plain UUID string, not an object); the previous fix only handled the double-underscore annotation format and a nested `member` object, missing this third shape entirely
+- Fixed `plane issue list --assignee` still failing with "Member not found" — same root cause; `getMemberDisplayName` and `getMemberEmail` now correctly extract from top-level `display_name`/`email` when `member` is a string UUID
+- Fixed `getMemberId` to return the string value of `member` when it is a UUID (rather than falling back to the membership record `id`), so issue assignee filtering passes the correct user UUID to the API
+
 ## 0.2.1
 
 ### Bug fixes

@@ -106,7 +106,7 @@ export function createIssueCommand(): Command {
           if (opts.json) {
             const fields = opts.fields;
             const projected = fields
-              ? issues.map((issue) => projectIssue(issue, stateMap, identifier, fields))
+              ? issues.map((issue) => projectIssue(issue, stateMap, identifier, fields, projectId))
               : issues;
             printJson(projected);
             return;
@@ -178,7 +178,7 @@ export function createIssueCommand(): Command {
           const stateMap = buildStateMap(unwrap<PlaneState>(stateRes));
 
           if (opts.json) {
-            printJson(opts.fields ? projectIssue(issue, stateMap, identifier, opts.fields) : issue);
+            printJson(opts.fields ? projectIssue(issue, stateMap, identifier, opts.fields, projectId) : issue);
             return;
           }
 
@@ -789,11 +789,27 @@ function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 
+// Maps raw API field names and common aliases → normalized field names in the projected output.
+// Lets AI agents use either the raw Plane API names (snake_case) or the normalized names.
+const FIELD_ALIASES: Record<string, string> = {
+  name: "title",
+  sequence_id: "sequence",
+  state_id: "state",
+  state_name: "state",
+  project_id: "projectId",
+  updated_at: "updatedAt",
+  created_at: "createdAt",
+  due_date: "dueDate",
+  start_date: "startDate",
+  label_ids: "labels",
+};
+
 function projectIssue(
   issue: PlaneIssue,
   stateMap: Map<string, string>,
   identifier: string,
   fieldsCsv: string,
+  projectId: string,
 ): Record<string, unknown> {
   const requested = fieldsCsv
     .split(",")
@@ -802,6 +818,7 @@ function projectIssue(
 
   const full: Record<string, unknown> = {
     id: issue.id,
+    projectId,
     identifier: `${identifier}-${issue.sequence_id}`,
     sequence: issue.sequence_id,
     title: issue.name,
@@ -820,7 +837,8 @@ function projectIssue(
   };
 
   return requested.reduce<Record<string, unknown>>((acc, field) => {
-    if (field in full) acc[field] = full[field];
+    const key = FIELD_ALIASES[field] ?? field;
+    if (key in full) acc[field] = full[key];
     return acc;
   }, {});
 }

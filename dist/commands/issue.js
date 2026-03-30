@@ -71,7 +71,7 @@ export function createIssueCommand() {
             if (opts.json) {
                 const fields = opts.fields;
                 const projected = fields
-                    ? issues.map((issue) => projectIssue(issue, stateMap, identifier, fields))
+                    ? issues.map((issue) => projectIssue(issue, stateMap, identifier, fields, projectId))
                     : issues;
                 printJson(projected);
                 return;
@@ -120,7 +120,7 @@ export function createIssueCommand() {
             ]);
             const stateMap = buildStateMap(unwrap(stateRes));
             if (opts.json) {
-                printJson(opts.fields ? projectIssue(issue, stateMap, identifier, opts.fields) : issue);
+                printJson(opts.fields ? projectIssue(issue, stateMap, identifier, opts.fields, projectId) : issue);
                 return;
             }
             printInfo(`${identifier}-${issue.sequence_id}  ${issue.name}`);
@@ -563,13 +563,28 @@ export function createIssueCommand() {
 function collect(value, previous) {
     return [...previous, value];
 }
-function projectIssue(issue, stateMap, identifier, fieldsCsv) {
+// Maps raw API field names and common aliases → normalized field names in the projected output.
+// Lets AI agents use either the raw Plane API names (snake_case) or the normalized names.
+const FIELD_ALIASES = {
+    name: "title",
+    sequence_id: "sequence",
+    state_id: "state",
+    state_name: "state",
+    project_id: "projectId",
+    updated_at: "updatedAt",
+    created_at: "createdAt",
+    due_date: "dueDate",
+    start_date: "startDate",
+    label_ids: "labels",
+};
+function projectIssue(issue, stateMap, identifier, fieldsCsv, projectId) {
     const requested = fieldsCsv
         .split(",")
         .map((field) => field.trim())
         .filter(Boolean);
     const full = {
         id: issue.id,
+        projectId,
         identifier: `${identifier}-${issue.sequence_id}`,
         sequence: issue.sequence_id,
         title: issue.name,
@@ -585,8 +600,9 @@ function projectIssue(issue, stateMap, identifier, fieldsCsv) {
         description: issue.description_stripped ?? issue.description_html ?? null,
     };
     return requested.reduce((acc, field) => {
-        if (field in full)
-            acc[field] = full[field];
+        const key = FIELD_ALIASES[field] ?? field;
+        if (key in full)
+            acc[field] = full[key];
         return acc;
     }, {});
 }

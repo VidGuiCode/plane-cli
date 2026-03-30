@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+### Bug fixes
+- Fixed `plane issue list --fields` and `plane issue get --fields` producing empty objects `{}` when field names match the raw Plane API format — `--fields` now accepts both the normalized camelCase names and common raw API aliases: `name`→`title`, `sequence_id`→`sequence`, `state_name`/`state_id`→`state`, `project_id`→`projectId`, `updated_at`→`updatedAt`, `created_at`→`createdAt`, `due_date`→`dueDate`, `start_date`→`startDate`, `label_ids`→`labels`
+- Added `projectId` as a selectable field in `--fields` output (accepts `project_id` alias)
+
 ## 0.2.2
 
 ### Bug fixes

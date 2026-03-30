@@ -37,7 +37,7 @@ The web app is the right choice for visual workflows. `plane-cli` is optimized f
 Requires Node.js 20+.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.2.2/plane-cli-0.2.2.tgz
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.2.3/plane-cli-0.2.3.tgz
 ```
 
 Works on Windows, Linux, and Mac.
@@ -149,7 +149,25 @@ Issue refs are flexible: `42` (active project), `PROJ-42` (any project), or a fu
 
 `issue list` supports filters: `--state`, `--priority`, `--assignee`
 
-`issue list` and `issue get` also support `--fields id,title,state,...` with `--json` for reduced AI payloads
+`issue list` and `issue get` support `--fields <names>` with `--json` for reduced payloads. Both normalized names and raw API names are accepted:
+
+| Normalized | Raw API alias(es) |
+|---|---|
+| `id` | — |
+| `projectId` | `project_id` |
+| `identifier` | — |
+| `sequence` | `sequence_id` |
+| `title` | `name` |
+| `state` | `state_name`, `state_id` |
+| `priority` | — |
+| `assignees` | — |
+| `labels` | `label_ids` |
+| `parent` | — |
+| `dueDate` | `due_date` |
+| `startDate` | `start_date` |
+| `createdAt` | `created_at` |
+| `updatedAt` | `updated_at` |
+| `description` | — |
 
 `issue create` accepts: `--title`, `--description`, `--priority`, `--assignee`, `--label`, `--parent`, `--due`, `--start`
 

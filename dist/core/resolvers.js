@@ -7,7 +7,7 @@ export async function resolveProject(client, ws, ref) {
     const match = projects.find((p) => p.identifier.toLowerCase() === ref.toLowerCase() ||
         p.name.toLowerCase() === ref.toLowerCase());
     if (!match)
-        throw new Error(`Project "${ref}" not found. Run: plane project list`);
+        throw new Error(`Project "${ref}" not found in workspace "${ws}". Run: plane project list`);
     return { id: match.id, identifier: match.identifier, name: match.name };
 }
 export function parseIssueRef(ref) {
@@ -77,6 +77,12 @@ export function resolveState(issue, stateMap) {
         return stateMap.get(s) ?? s;
     return "-";
 }
+// ── Current user ─────────────────────────────────────────────────────────────
+/** Fetch the authenticated user's ID via /users/me/. */
+export async function resolveCurrentUserId(client) {
+    const user = await client.get("users/me/");
+    return user.id;
+}
 // ── Members ───────────────────────────────────────────────────────────────────
 /** Extract display name — handles all known Plane API member shapes. */
 export function getMemberDisplayName(m) {
@@ -117,7 +123,7 @@ export async function resolveMember(client, ws, nameOrEmail) {
     const match = members.find((m) => getMemberDisplayName(m).toLowerCase() === lower ||
         (getMemberEmail(m)?.toLowerCase() ?? "") === lower);
     if (!match)
-        throw new Error(`Member "${nameOrEmail}" not found. Run: plane members list`);
+        throw new Error(`Member "${nameOrEmail}" not found in workspace "${ws}". Check with: plane members list`);
     return getMemberId(match);
 }
 // ── Cycles ────────────────────────────────────────────────────────────────────
@@ -130,7 +136,7 @@ export async function resolveCycle(client, ws, projectId, nameOrId) {
     const lower = nameOrId.toLowerCase();
     const match = cycles.find((c) => c.name.toLowerCase() === lower);
     if (!match)
-        throw new Error(`Cycle "${nameOrId}" not found. Run: plane cycle list`);
+        throw new Error(`Cycle "${nameOrId}" not found in this project. Check with: plane cycle list`);
     return { id: match.id, name: match.name };
 }
 // ── Modules ───────────────────────────────────────────────────────────────────
@@ -143,8 +149,49 @@ export async function resolveModule(client, ws, projectId, nameOrId) {
     const lower = nameOrId.toLowerCase();
     const match = modules.find((m) => m.name.toLowerCase() === lower);
     if (!match)
-        throw new Error(`Module "${nameOrId}" not found. Run: plane module list`);
+        throw new Error(`Module "${nameOrId}" not found in this project. Check with: plane module list`);
     return { id: match.id, name: match.name };
+}
+// ── Issue normalization ──────────────────────────────────────────────────────
+/**
+ * Build a fully normalized issue object with both raw API fields and camelCase aliases.
+ * Used by `--json` output across issue list, cycle issues, and module issues.
+ */
+export function normalizeIssue(issue, stateMap, identifier, projectId) {
+    const stateName = resolveState(issue, stateMap);
+    const labelNames = (issue.labels ?? []).map((label) => typeof label === "object" && "name" in label ? label.name : String(label));
+    return {
+        ...issue,
+        project_id: projectId,
+        projectId,
+        identifier: `${identifier}-${issue.sequence_id}`,
+        sequence: issue.sequence_id,
+        title: issue.name,
+        state: stateName,
+        state_name: stateName,
+        state_id: typeof issue.state === "string" ? issue.state : null,
+        labels: labelNames,
+        label_ids: labelNames,
+        dueDate: issue.due_date ?? null,
+        startDate: issue.start_date ?? null,
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
+        description: issue.description_stripped ?? issue.description_html ?? null,
+    };
+}
+/**
+ * Project a normalized issue down to a specific set of fields.
+ */
+export function projectIssueFields(normalized, fieldsCsv) {
+    const requested = fieldsCsv
+        .split(/[,\s]+/)
+        .map((f) => f.trim())
+        .filter(Boolean);
+    return requested.reduce((acc, field) => {
+        if (field in normalized)
+            acc[field] = normalized[field];
+        return acc;
+    }, {});
 }
 // ── Labels ────────────────────────────────────────────────────────────────────
 export async function resolveLabel(client, ws, projectId, nameOrColor) {
@@ -156,7 +203,7 @@ export async function resolveLabel(client, ws, projectId, nameOrColor) {
     const lower = nameOrColor.toLowerCase();
     const match = labels.find((l) => l.name.toLowerCase() === lower || l.color.toLowerCase() === lower);
     if (!match)
-        throw new Error(`Label "${nameOrColor}" not found. Run: plane label list`);
+        throw new Error(`Label "${nameOrColor}" not found in this project. Check with: plane label list`);
     return match.id;
 }
 //# sourceMappingURL=resolvers.js.map

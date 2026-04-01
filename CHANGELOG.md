@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.5
+
+### Features
+- Added `--assignee me` — resolves the special token `me` to the current authenticated user on `issue list`, `issue create`, and `issue update` (fixes #1)
+- Added `plane issue mine` — shortcut for listing issues assigned to the current user (fixes #2)
+- Added `plane cycle current` — shows the active cycle and its issues (fixes #3)
+- Added `--updated-since <date>` filter on `issue list` — filters issues by last-updated date, useful for "what changed today" queries (fixes #4)
+- Added post-pack release verification script (`npm run verify-pack`) — installs the `.tgz` into a temp directory and runs smoke tests before publishing (fixes #5)
+
+### Output consistency
+- `issue list --json`, `issue get --json`, `cycle issues --json`, and `module issues --json` now return normalized camelCase fields (state name, identifier string, label names) instead of raw API shapes, closing the gap between `--json` and `--json --fields` (fixes #6)
+
+### Error messages
+- API errors now include actionable hints based on HTTP status code (401→check token, 404→verify identifiers, 429→rate limited) (fixes #7)
+- Resolver error messages now include more context (e.g., which workspace was searched)
+
 ## 0.2.4
 
 ### Bug fixes

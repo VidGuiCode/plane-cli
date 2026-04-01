@@ -7,7 +7,7 @@ import { ask } from "../core/prompt.js";
 import { exitWithError, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
-import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, } from "../core/resolvers.js";
+import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, resolveCurrentUserId, normalizeIssue, projectIssueFields, } from "../core/resolvers.js";
 export function createIssueCommand() {
     const command = new Command("issue")
         .description("Work with Plane issues")
@@ -20,7 +20,8 @@ export function createIssueCommand() {
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--state <name>", "Filter by state name")
         .option("--priority <value>", "Filter by priority: urgent | high | medium | low | none")
-        .option("--assignee <name>", "Filter by assignee display name or email")
+        .option("--assignee <name>", "Filter by assignee display name, email, or 'me'")
+        .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
         .option("--json", "Output raw JSON")
         .option("--fields <names>", "Comma-separated fields for JSON output")
         .action(async (opts) => {
@@ -28,7 +29,6 @@ export function createIssueCommand() {
             const config = loadConfig();
             const client = createClient(config);
             const ws = opts.workspace ?? requireActiveWorkspace(config);
-            const style = client.issuesSegment();
             let projectId;
             let identifier;
             if (opts.project) {
@@ -41,48 +41,64 @@ export function createIssueCommand() {
                 projectId = active.id;
                 identifier = active.identifier;
             }
-            // Build filter query string
-            const params = new URLSearchParams();
-            if (opts.state) {
-                const stateRes = await client.get(`workspaces/${ws}/projects/${projectId}/states/`);
-                const states = unwrap(stateRes);
-                const match = states.find((s) => s.name.toLowerCase() === opts.state.toLowerCase());
-                if (match)
-                    params.set("state", match.id);
-            }
-            if (opts.priority)
-                params.set("priority", opts.priority);
+            // Resolve assignee
+            let assigneeId;
             if (opts.assignee) {
-                const memberId = await resolveMember(client, ws, opts.assignee);
-                params.set("assignee", memberId);
+                assigneeId =
+                    opts.assignee.toLowerCase() === "me"
+                        ? await resolveCurrentUserId(client)
+                        : await resolveMember(client, ws, opts.assignee);
             }
-            const qs = params.toString();
-            const basePath = `workspaces/${ws}/projects/${projectId}/${style}/${qs ? `?${qs}` : ""}`;
-            const [issues, stateMap] = await Promise.all([
-                fetchAll(client, basePath),
-                client
-                    .get(`workspaces/${ws}/projects/${projectId}/states/`)
-                    .then((r) => buildStateMap(unwrap(r))),
-            ]);
-            if (issues.length === 0) {
-                printInfo("No issues found.");
-                return;
+            await listIssuesCore(client, ws, projectId, identifier, {
+                state: opts.state,
+                priority: opts.priority,
+                assigneeId,
+                updatedSince: opts.updatedSince,
+                json: opts.json,
+                fields: opts.fields,
+            });
+        }
+        catch (err) {
+            exitWithError(err, Boolean(opts.json));
+        }
+    });
+    // ── mine ─────────────────────────────────────────────────────────────────
+    command
+        .command("mine")
+        .description("List issues assigned to you (shortcut for: issue list --assignee me)")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--state <name>", "Filter by state name")
+        .option("--priority <value>", "Filter by priority: urgent | high | medium | low | none")
+        .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
+        .option("--json", "Output raw JSON")
+        .option("--fields <names>", "Comma-separated fields for JSON output")
+        .action(async (opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            let projectId;
+            let identifier;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+                identifier = proj.identifier;
             }
-            if (opts.json) {
-                const fields = opts.fields;
-                const projected = fields
-                    ? issues.map((issue) => projectIssue(issue, stateMap, identifier, fields, projectId))
-                    : issues;
-                printJson(projected);
-                return;
+            else {
+                const active = requireActiveProject(config);
+                projectId = active.id;
+                identifier = active.identifier;
             }
-            const rows = issues.map((issue) => [
-                `${identifier}-${issue.sequence_id}`,
-                issue.name,
-                resolveState(issue, stateMap),
-                issue.priority ?? "",
-            ]);
-            printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
+            const assigneeId = await resolveCurrentUserId(client);
+            await listIssuesCore(client, ws, projectId, identifier, {
+                state: opts.state,
+                priority: opts.priority,
+                assigneeId,
+                updatedSince: opts.updatedSince,
+                json: opts.json,
+                fields: opts.fields,
+            });
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
@@ -120,7 +136,8 @@ export function createIssueCommand() {
             ]);
             const stateMap = buildStateMap(unwrap(stateRes));
             if (opts.json) {
-                printJson(opts.fields ? projectIssue(issue, stateMap, identifier, opts.fields, projectId) : issue);
+                const normalized = normalizeIssue(issue, stateMap, identifier, projectId);
+                printJson(opts.fields ? projectIssueFields(normalized, opts.fields) : normalized);
                 return;
             }
             printInfo(`${identifier}-${issue.sequence_id}  ${issue.name}`);
@@ -203,7 +220,9 @@ export function createIssueCommand() {
             if (opts.start)
                 body.start_date = opts.start;
             if (opts.assignee.length > 0) {
-                const ids = await Promise.all(opts.assignee.map((a) => resolveMember(client, ws, a)));
+                const ids = await Promise.all(opts.assignee.map((a) => a.toLowerCase() === "me"
+                    ? resolveCurrentUserId(client)
+                    : resolveMember(client, ws, a)));
                 body.assignees = ids;
             }
             if (opts.label.length > 0) {
@@ -292,7 +311,9 @@ export function createIssueCommand() {
                 body.state = match ? match.id : opts.state;
             }
             if (opts.assignee.length > 0) {
-                const ids = await Promise.all(opts.assignee.map((a) => resolveMember(client, ws, a)));
+                const ids = await Promise.all(opts.assignee.map((a) => a.toLowerCase() === "me"
+                    ? resolveCurrentUserId(client)
+                    : resolveMember(client, ws, a)));
                 body.assignees = ids;
             }
             if (opts.label.length > 0) {
@@ -563,42 +584,54 @@ export function createIssueCommand() {
 function collect(value, previous) {
     return [...previous, value];
 }
-function projectIssue(issue, stateMap, identifier, fieldsCsv, projectId) {
-    // Split on commas OR spaces so the value works whether or not the shell
-    // (e.g. PowerShell) splits a bare `id,name,title` into separate arguments.
-    const requested = fieldsCsv
-        .split(/[,\s]+/)
-        .map((f) => f.trim())
-        .filter(Boolean);
-    const stateName = resolveState(issue, stateMap);
-    const labelNames = (issue.labels ?? []).map((label) => typeof label === "object" && "name" in label ? label.name : String(label));
-    // Build lookup from ALL raw issue fields first, then layer normalized aliases
-    // on top. This means any field the API returns (id, name, priority, assignees,
-    // sequence_id, updated_at, …) is accessible by its exact API name, AND the
-    // camelCase aliases also work.
-    const full = {
-        ...issue,
-        // computed / normalized fields (both raw-name and camelCase forms)
-        project_id: projectId,
-        projectId,
-        identifier: `${identifier}-${issue.sequence_id}`,
-        sequence: issue.sequence_id,
-        title: issue.name, // 'name' already comes from spread; 'title' is alias
-        state: stateName,
-        state_name: stateName,
-        state_id: typeof issue.state === "string" ? issue.state : null,
-        labels: labelNames,
-        label_ids: labelNames,
-        dueDate: issue.due_date ?? null,
-        startDate: issue.start_date ?? null,
-        createdAt: issue.created_at,
-        updatedAt: issue.updated_at,
-        description: issue.description_stripped ?? issue.description_html ?? null,
-    };
-    return requested.reduce((acc, field) => {
-        if (field in full)
-            acc[field] = full[field];
-        return acc;
-    }, {});
+async function listIssuesCore(client, ws, projectId, identifier, opts) {
+    const style = client.issuesSegment();
+    // Build filter query string
+    const params = new URLSearchParams();
+    if (opts.state) {
+        const stateRes = await client.get(`workspaces/${ws}/projects/${projectId}/states/`);
+        const states = unwrap(stateRes);
+        const match = states.find((s) => s.name.toLowerCase() === opts.state.toLowerCase());
+        if (match)
+            params.set("state", match.id);
+    }
+    if (opts.priority)
+        params.set("priority", opts.priority);
+    if (opts.assigneeId)
+        params.set("assignee", opts.assigneeId);
+    const qs = params.toString();
+    const basePath = `workspaces/${ws}/projects/${projectId}/${style}/${qs ? `?${qs}` : ""}`;
+    const [allIssues, stateMap] = await Promise.all([
+        fetchAll(client, basePath),
+        client
+            .get(`workspaces/${ws}/projects/${projectId}/states/`)
+            .then((r) => buildStateMap(unwrap(r))),
+    ]);
+    let issues = allIssues;
+    if (opts.updatedSince) {
+        const since = new Date(opts.updatedSince);
+        if (isNaN(since.getTime())) {
+            throw new ValidationError(`Invalid date "${opts.updatedSince}". Use YYYY-MM-DD format.`);
+        }
+        issues = allIssues.filter((issue) => new Date(issue.updated_at) >= since);
+    }
+    if (issues.length === 0) {
+        printInfo("No issues found.");
+        return;
+    }
+    if (opts.json) {
+        const normalized = issues.map((issue) => normalizeIssue(issue, stateMap, identifier, projectId));
+        printJson(opts.fields
+            ? normalized.map((n) => projectIssueFields(n, opts.fields))
+            : normalized);
+        return;
+    }
+    const rows = issues.map((issue) => [
+        `${identifier}-${issue.sequence_id}`,
+        issue.name,
+        resolveState(issue, stateMap),
+        issue.priority ?? "",
+    ]);
+    printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
 }
 //# sourceMappingURL=issue.js.map

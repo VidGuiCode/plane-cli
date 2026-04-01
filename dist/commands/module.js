@@ -4,7 +4,7 @@ import { unwrap, fetchAll } from "../core/api-client.js";
 import { printInfo, printTable, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
-import { resolveProject, resolveIssueRef, resolveModule, buildStateMap, resolveState, } from "../core/resolvers.js";
+import { resolveProject, resolveIssueRef, resolveModule, buildStateMap, resolveState, normalizeIssue, } from "../core/resolvers.js";
 export function createModuleCommand() {
     const command = new Command("module")
         .description("Work with Plane modules")
@@ -172,7 +172,7 @@ export function createModuleCommand() {
                 return;
             }
             if (opts.json) {
-                printJson(issues);
+                printJson(issues.map((issue) => normalizeIssue(issue, stateMap, identifier, projectId)));
                 return;
             }
             const rows = issues.map((issue) => [

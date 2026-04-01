@@ -4,7 +4,7 @@ import { unwrap, fetchAll } from "../core/api-client.js";
 import { printInfo, printTable, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
-import { resolveProject, resolveIssueRef, resolveCycle, buildStateMap, resolveState, } from "../core/resolvers.js";
+import { resolveProject, resolveIssueRef, resolveCycle, buildStateMap, resolveState, normalizeIssue, } from "../core/resolvers.js";
 export function createCycleCommand() {
     const command = new Command("cycle")
         .description("Work with Plane cycles (sprints)")
@@ -50,6 +50,71 @@ export function createCycleCommand() {
             exitWithError(err, Boolean(opts.json));
         }
     });
+    // ── current ───────────────────────────────────────────────────────────────
+    command
+        .command("current")
+        .description("Show the active cycle and its issues")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
+        .action(async (opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            let projectId;
+            let identifier;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+                identifier = proj.identifier;
+            }
+            else {
+                const active = requireActiveProject(config);
+                projectId = active.id;
+                identifier = active.identifier;
+            }
+            const cycles = await fetchAll(client, `workspaces/${ws}/projects/${projectId}/cycles/`);
+            const current = cycles.find((c) => c.status?.toLowerCase() === "current");
+            if (!current) {
+                printInfo("No active cycle found in this project.");
+                return;
+            }
+            const [issues, stateMap] = await Promise.all([
+                fetchAll(client, `workspaces/${ws}/projects/${projectId}/cycles/${current.id}/issues/`),
+                client
+                    .get(`workspaces/${ws}/projects/${projectId}/states/`)
+                    .then((r) => buildStateMap(unwrap(r))),
+            ]);
+            if (opts.json) {
+                printJson({
+                    cycle: current,
+                    issues: issues.map((issue) => normalizeIssue(issue, stateMap, identifier, projectId)),
+                });
+                return;
+            }
+            printInfo(`Cycle: ${current.name}`);
+            if (current.start_date)
+                printInfo(`Start: ${current.start_date}`);
+            if (current.end_date)
+                printInfo(`End:   ${current.end_date}`);
+            printInfo("");
+            if (issues.length === 0) {
+                printInfo("No issues in this cycle.");
+                return;
+            }
+            const rows = issues.map((issue) => [
+                `${identifier}-${issue.sequence_id}`,
+                issue.name,
+                resolveState(issue, stateMap),
+                issue.priority ?? "",
+            ]);
+            printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
+        }
+        catch (err) {
+            exitWithError(err, Boolean(opts.json));
+        }
+    });
     // ── issues ────────────────────────────────────────────────────────────────
     command
         .command("issues <cycle>")
@@ -86,7 +151,7 @@ export function createCycleCommand() {
                 return;
             }
             if (opts.json) {
-                printJson(issues);
+                printJson(issues.map((issue) => normalizeIssue(issue, stateMap, identifier, projectId)));
                 return;
             }
             const rows = issues.map((issue) => [

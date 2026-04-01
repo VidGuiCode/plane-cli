@@ -24,6 +24,8 @@ export declare function resolveIssueRef(client: PlaneApiClient, ws: string, acti
 }>;
 export declare function buildStateMap(states: PlaneState[]): Map<string, string>;
 export declare function resolveState(issue: PlaneIssue, stateMap: Map<string, string>): string;
+/** Fetch the authenticated user's ID via /users/me/. */
+export declare function resolveCurrentUserId(client: PlaneApiClient): Promise<string>;
 /** Extract display name — handles all known Plane API member shapes. */
 export declare function getMemberDisplayName(m: PlaneMember): string;
 /** Extract email — handles all known Plane API member shapes. */
@@ -42,6 +44,15 @@ export declare function resolveModule(client: PlaneApiClient, ws: string, projec
     id: string;
     name: string;
 }>;
+/**
+ * Build a fully normalized issue object with both raw API fields and camelCase aliases.
+ * Used by `--json` output across issue list, cycle issues, and module issues.
+ */
+export declare function normalizeIssue(issue: PlaneIssue, stateMap: Map<string, string>, identifier: string, projectId: string): Record<string, unknown>;
+/**
+ * Project a normalized issue down to a specific set of fields.
+ */
+export declare function projectIssueFields(normalized: Record<string, unknown>, fieldsCsv: string): Record<string, unknown>;
 export declare function resolveLabel(client: PlaneApiClient, ws: string, projectId: string, nameOrColor: string): Promise<string>;
 export {};
 //# sourceMappingURL=resolvers.d.ts.map

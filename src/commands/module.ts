@@ -15,6 +15,7 @@ import {
   resolveModule,
   buildStateMap,
   resolveState,
+  normalizeIssue,
 } from "../core/resolvers.js";
 import type { PlaneModule, PlaneIssue, PlaneState } from "../core/types.js";
 
@@ -237,7 +238,9 @@ export function createModuleCommand(): Command {
           }
 
           if (opts.json) {
-            printJson(issues);
+            printJson(
+              issues.map((issue) => normalizeIssue(issue, stateMap, identifier, projectId)),
+            );
             return;
           }
 

@@ -15,6 +15,7 @@ import {
   resolveCycle,
   buildStateMap,
   resolveState,
+  normalizeIssue,
 } from "../core/resolvers.js";
 import type { PlaneCycle, PlaneIssue, PlaneState } from "../core/types.js";
 
@@ -75,6 +76,89 @@ export function createCycleCommand(): Command {
       }
     });
 
+  // ── current ───────────────────────────────────────────────────────────────
+
+  command
+    .command("current")
+    .description("Show the active cycle and its issues")
+    .option("--workspace <slug>", "Workspace slug (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
+    .option("--json", "Output raw JSON")
+    .action(async (opts: { workspace?: string; project?: string; json?: boolean }) => {
+      try {
+        const config = loadConfig();
+        const client = createClient(config);
+        const ws = opts.workspace ?? requireActiveWorkspace(config);
+
+        let projectId: string;
+        let identifier: string;
+        if (opts.project) {
+          const proj = await resolveProject(client, ws, opts.project);
+          projectId = proj.id;
+          identifier = proj.identifier;
+        } else {
+          const active = requireActiveProject(config);
+          projectId = active.id;
+          identifier = active.identifier;
+        }
+
+        const cycles = await fetchAll<PlaneCycle>(
+          client,
+          `workspaces/${ws}/projects/${projectId}/cycles/`,
+        );
+        const current = cycles.find(
+          (c) => c.status?.toLowerCase() === "current",
+        );
+        if (!current) {
+          printInfo("No active cycle found in this project.");
+          return;
+        }
+
+        const [issues, stateMap] = await Promise.all([
+          fetchAll<PlaneIssue>(
+            client,
+            `workspaces/${ws}/projects/${projectId}/cycles/${current.id}/issues/`,
+          ),
+          client
+            .get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`)
+            .then((r) => buildStateMap(unwrap<PlaneState>(r))),
+        ]);
+
+        if (opts.json) {
+          printJson({
+            cycle: current,
+            issues: issues.map((issue) =>
+              normalizeIssue(issue, stateMap, identifier, projectId),
+            ),
+          });
+          return;
+        }
+
+        printInfo(`Cycle: ${current.name}`);
+        if (current.start_date) printInfo(`Start: ${current.start_date}`);
+        if (current.end_date) printInfo(`End:   ${current.end_date}`);
+        printInfo("");
+
+        if (issues.length === 0) {
+          printInfo("No issues in this cycle.");
+          return;
+        }
+
+        const rows = issues.map((issue) => [
+          `${identifier}-${issue.sequence_id}`,
+          issue.name,
+          resolveState(issue, stateMap),
+          issue.priority ?? "",
+        ]);
+        printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
+      } catch (err) {
+        exitWithError(err, Boolean(opts.json));
+      }
+    });
+
   // ── issues ────────────────────────────────────────────────────────────────
 
   command
@@ -123,7 +207,9 @@ export function createCycleCommand(): Command {
           }
 
           if (opts.json) {
-            printJson(issues);
+            printJson(
+              issues.map((issue) => normalizeIssue(issue, stateMap, identifier, projectId)),
+            );
             return;
           }
 

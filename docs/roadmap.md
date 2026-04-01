@@ -27,4 +27,31 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-Items beyond v0.2.5 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).
+## v0.2.6
+
+### Bug fixes
+
+- **`--no-interactive` errors on optional fields** — `issue create --no-interactive` fails when optional fields like description are not provided, even though they should default to empty. Fix: default optional fields to their empty/null value in non-interactive mode instead of erroring.
+
+### Polish
+
+- **`--name` alias for `--title` on `issue update`** — agents reading `--json` output see the `name` field and naturally try `--name` on update. Accept `--name` as an alias for `--title`, consistent with how `--fields` already maps both.
+- **`view` alias for `get`** — `plane issue view` is a common first guess; add it as an alias for `get` on issue (and other resource commands where applicable).
+- **Preserve description formatting in compact/text output** — newlines and structure in issue descriptions get lost in flat text rendering. Retain line breaks so descriptions remain readable.
+- **Richer cycle/module detail output** — cycle and module output is sparse compared to the Plane UI. Surface additional fields (dates, status, issue counts) already available from the API.
+
+---
+
+## v0.3.0
+
+### Features
+
+- **`plane project create`** — create projects from the CLI (`plane project create <name> --identifier <ID> --description "..." --network 0|2`). Highest-impact missing command — blocks AI agent workflows that need to set up new projects.
+- **`plane project update`** — update project name, description, and settings to complete the project CRUD surface.
+- **`plane issue move`** (cross-project) — move an issue to a different project (`plane issue move <issue> --to-project <identifier>`). Needs API research — if the Plane API doesn't support native moves, provide a `--copy` flag that recreates the issue in the target project.
+- **Bulk operations** — update multiple issues in one call (e.g., `plane issue update ROADMAP-5,6,7 --state Done`). Accepts comma-separated issue refs and loops API calls.
+- **Multi-filter** — support multiple values for filters on `issue list` (e.g., `--state Started,InReview`, combined `--state` + `--priority` + `--assignee`).
+
+---
+
+Items beyond v0.3.0 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).

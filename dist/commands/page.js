@@ -54,6 +54,7 @@ export function createPageCommand() {
     // ── get ───────────────────────────────────────────────────────────────────
     command
         .command("get <page>")
+        .alias("view")
         .description("Show a page by ID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
@@ -112,7 +113,7 @@ export function createPageCommand() {
             else {
                 projectId = requireActiveProject(config).id;
             }
-            const content = opts.content ?? (await ask("Content"));
+            const content = opts.content ?? (await ask("Content", ""));
             const body = { name };
             if (content) {
                 body.description_html = `<p>${content}</p>`;

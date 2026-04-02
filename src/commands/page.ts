@@ -74,6 +74,7 @@ export function createPageCommand(): Command {
 
   command
     .command("get <page>")
+    .alias("view")
     .description("Show a page by ID")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
@@ -152,7 +153,7 @@ export function createPageCommand(): Command {
             projectId = requireActiveProject(config).id;
           }
 
-          const content = opts.content ?? (await ask("Content"));
+          const content = opts.content ?? (await ask("Content", ""));
           const body: { name: string; description_html?: string } = { name };
           if (content) {
             body.description_html = `<p>${content}</p>`;

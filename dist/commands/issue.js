@@ -107,6 +107,7 @@ export function createIssueCommand() {
     // ── get ───────────────────────────────────────────────────────────────────
     command
         .command("get <issue>")
+        .alias("view")
         .description("Fetch a single issue. Accepts: 42 (active project), PROJ-42 (any project), or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
@@ -209,7 +210,7 @@ export function createIssueCommand() {
             if (!title) {
                 throw new ValidationError("Title is required.");
             }
-            const description = opts.description ?? (await ask("Description (optional)"));
+            const description = opts.description ?? (await ask("Description (optional)", ""));
             const body = { name: title };
             if (description)
                 body.description_html = `<p>${description}</p>`;
@@ -266,6 +267,7 @@ export function createIssueCommand() {
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--title <title>", "New title")
+        .option("--name <name>", "New title (alias for --title)")
         .option("--description <description>", "New description")
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
         .option("--state <state>", "State name or ID")
@@ -294,8 +296,9 @@ export function createIssueCommand() {
             }
             const { issueId, projectId, identifier } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
             const body = {};
-            if (opts.title)
-                body.name = opts.title;
+            const titleValue = opts.title ?? opts.name;
+            if (titleValue)
+                body.name = titleValue;
             if (opts.description)
                 body.description_html = `<p>${opts.description}</p>`;
             if (opts.priority)
@@ -325,7 +328,7 @@ export function createIssueCommand() {
                 body.parent = parentId;
             }
             if (Object.keys(body).length === 0) {
-                throw new ValidationError("Nothing to update. Use --title, --description, --priority, --state, --assignee, --label, --parent, --due, or --start.");
+                throw new ValidationError("Nothing to update. Use --title (or --name), --description, --priority, --state, --assignee, --label, --parent, --due, or --start.");
             }
             const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`;
             if (isDryRunEnabled()) {

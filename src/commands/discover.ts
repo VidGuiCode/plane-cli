@@ -231,11 +231,17 @@ export function createDiscoverCommand(): Command {
               status: cycle.status ?? null,
               startDate: cycle.start_date ?? null,
               endDate: cycle.end_date ?? null,
+              totalIssues: cycle.total_issues ?? null,
+              completedIssues: cycle.completed_issues ?? null,
             })),
             modules: inputs.modules.map((module) => ({
               id: module.id,
               name: module.name,
               status: module.status ?? null,
+              startDate: module.start_date ?? null,
+              targetDate: module.target_date ?? null,
+              totalIssues: module.total_issues ?? null,
+              completedIssues: module.completed_issues ?? null,
             })),
           },
         });
@@ -308,11 +314,17 @@ export function createDiscoverCommand(): Command {
                       status: cycle.status ?? null,
                       startDate: cycle.start_date ?? null,
                       endDate: cycle.end_date ?? null,
+                      totalIssues: cycle.total_issues ?? null,
+                      completedIssues: cycle.completed_issues ?? null,
                     }))
                   : inputs.modules.map((module) => ({
                       id: module.id,
                       name: module.name,
                       status: module.status ?? null,
+                      startDate: module.start_date ?? null,
+                      targetDate: module.target_date ?? null,
+                      totalIssues: module.total_issues ?? null,
+                      completedIssues: module.completed_issues ?? null,
                     }));
 
           printJson({

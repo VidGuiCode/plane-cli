@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.6
+
+### Bug fixes
+- Fixed `issue create` and `page create` hanging in non-interactive mode when optional fields (description, content) have no default — `ask()` now receives an empty-string default so it returns immediately in non-TTY environments (fixes #8)
+
+### Features
+- Added `--name` as an alias for `--title` on `issue update` — matches the Plane API field name, useful for AI agents that discover fields via `plane discover issue-inputs` (fixes #9)
+- Added `view` alias for `issue get` and `page get` — `plane issue view PROJ-42` and `plane page view <id>` now work alongside `get` (fixes #10)
+- Improved `stripHtml()` to preserve paragraph breaks, line breaks, and list structure instead of collapsing everything to a single line (fixes #11)
+- Richer `cycle` and `module` output: types now include progress counters (`totalIssues`, `completedIssues`, etc.), `module list` table shows NAME/STATUS/START/TARGET columns, and `discover cycles`/`discover modules` expose progress fields (fixes #12)
+
 ## 0.2.5
 
 ### Features

@@ -2,7 +2,7 @@
 
 Unofficial CLI for [Plane](https://plane.so) — manage your workspace, projects, and issues from any terminal or IDE.
 
-![Version](https://img.shields.io/badge/version-0.2.5-blue)
+![Version](https://img.shields.io/badge/version-0.2.6-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20mac-lightgrey)
@@ -14,7 +14,7 @@ Works with self-hosted Plane instances and Plane Cloud. Token-based auth — no 
 ## Install
 
 ```bash
-npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.2.5/plane-cli-0.2.5.tgz
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.2.6/plane-cli-0.2.6.tgz
 ```
 
 Requires Node.js 20+.

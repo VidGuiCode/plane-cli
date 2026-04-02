@@ -62,8 +62,13 @@ export function createModuleCommand(): Command {
           return;
         }
 
-        const rows = modules.map((m) => [`  ${m.id}`, m.name, m.status ?? ""]);
-        printTable(rows, ["ID", "NAME", "STATUS"]);
+        const rows = modules.map((m) => [
+          `  ${m.name}`,
+          m.status ?? "",
+          m.start_date ?? "",
+          m.target_date ?? "",
+        ]);
+        printTable(rows, ["NAME", "STATUS", "START", "TARGET"]);
       } catch (err) {
         exitWithError(err, Boolean(opts.json));
       }

@@ -65,7 +65,18 @@ export interface PlaneIssue {
 export interface PlaneModule {
     id: string;
     name: string;
+    description?: string;
     status: string;
+    start_date?: string | null;
+    target_date?: string | null;
+    total_issues?: number;
+    completed_issues?: number;
+    cancelled_issues?: number;
+    started_issues?: number;
+    unstarted_issues?: number;
+    backlog_issues?: number;
+    created_at?: string;
+    updated_at?: string;
 }
 export interface PlaneLabel {
     id: string;
@@ -88,9 +99,18 @@ export interface PlaneMember {
 export interface PlaneCycle {
     id: string;
     name: string;
+    description?: string;
     status?: string;
     start_date?: string | null;
     end_date?: string | null;
+    total_issues?: number;
+    completed_issues?: number;
+    cancelled_issues?: number;
+    started_issues?: number;
+    unstarted_issues?: number;
+    backlog_issues?: number;
+    created_at?: string;
+    updated_at?: string;
 }
 export interface PlanePage {
     id: string;

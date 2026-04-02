@@ -162,6 +162,7 @@ export function createIssueCommand(): Command {
 
   command
     .command("get <issue>")
+    .alias("view")
     .description(
       "Fetch a single issue. Accepts: 42 (active project), PROJ-42 (any project), or UUID",
     )
@@ -310,7 +311,7 @@ export function createIssueCommand(): Command {
             throw new ValidationError("Title is required.");
           }
 
-          const description = opts.description ?? (await ask("Description (optional)"));
+          const description = opts.description ?? (await ask("Description (optional)", ""));
 
           const body: Record<string, unknown> = { name: title };
           if (description) body.description_html = `<p>${description}</p>`;
@@ -387,6 +388,7 @@ export function createIssueCommand(): Command {
       "Project identifier or name (overrides active context)",
     )
     .option("--title <title>", "New title")
+    .option("--name <name>", "New title (alias for --title)")
     .option("--description <description>", "New description")
     .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
     .option("--state <state>", "State name or ID")
@@ -403,6 +405,7 @@ export function createIssueCommand(): Command {
           workspace?: string;
           project?: string;
           title?: string;
+          name?: string;
           description?: string;
           priority?: string;
           state?: string;
@@ -442,7 +445,8 @@ export function createIssueCommand(): Command {
           );
 
           const body: Record<string, unknown> = {};
-          if (opts.title) body.name = opts.title;
+          const titleValue = opts.title ?? opts.name;
+          if (titleValue) body.name = titleValue;
           if (opts.description) body.description_html = `<p>${opts.description}</p>`;
           if (opts.priority) body.priority = opts.priority;
           if (opts.due) body.due_date = opts.due === "none" ? null : opts.due;
@@ -491,7 +495,7 @@ export function createIssueCommand(): Command {
 
           if (Object.keys(body).length === 0) {
             throw new ValidationError(
-              "Nothing to update. Use --title, --description, --priority, --state, --assignee, --label, --parent, --due, or --start.",
+              "Nothing to update. Use --title (or --name), --description, --priority, --state, --assignee, --label, --parent, --due, or --start.",
             );
           }
 

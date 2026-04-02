@@ -27,18 +27,18 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-## v0.2.6
+## v0.2.6 *(shipped)*
 
 ### Bug fixes
 
-- **`--no-interactive` errors on optional fields** — `issue create --no-interactive` fails when optional fields like description are not provided, even though they should default to empty. Fix: default optional fields to their empty/null value in non-interactive mode instead of erroring.
+- ~~**`--no-interactive` errors on optional fields**~~ — fixed: optional fields default to empty in non-interactive mode (#8)
 
 ### Polish
 
-- **`--name` alias for `--title` on `issue update`** — agents reading `--json` output see the `name` field and naturally try `--name` on update. Accept `--name` as an alias for `--title`, consistent with how `--fields` already maps both.
-- **`view` alias for `get`** — `plane issue view` is a common first guess; add it as an alias for `get` on issue (and other resource commands where applicable).
-- **Preserve description formatting in compact/text output** — newlines and structure in issue descriptions get lost in flat text rendering. Retain line breaks so descriptions remain readable.
-- **Richer cycle/module detail output** — cycle and module output is sparse compared to the Plane UI. Surface additional fields (dates, status, issue counts) already available from the API.
+- ~~**`--name` alias for `--title` on `issue update`**~~ — shipped (#9)
+- ~~**`view` alias for `get`**~~ — shipped on `issue get` and `page get` (#10)
+- ~~**Preserve description formatting in compact/text output**~~ — shipped: `stripHtml` preserves paragraphs, line breaks, and list structure (#11)
+- ~~**Richer cycle/module detail output**~~ — shipped: progress counters, richer tables and discovery output (#12)
 
 ---
 

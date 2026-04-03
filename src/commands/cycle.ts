@@ -109,9 +109,7 @@ export function createCycleCommand(): Command {
           client,
           `workspaces/${ws}/projects/${projectId}/cycles/`,
         );
-        const current = cycles.find(
-          (c) => c.status?.toLowerCase() === "current",
-        );
+        const current = cycles.find((c) => c.status?.toLowerCase() === "current");
         if (!current) {
           printInfo("No active cycle found in this project.");
           return;
@@ -130,9 +128,7 @@ export function createCycleCommand(): Command {
         if (opts.json) {
           printJson({
             cycle: current,
-            issues: issues.map((issue) =>
-              normalizeIssue(issue, stateMap, identifier, projectId),
-            ),
+            issues: issues.map((issue) => normalizeIssue(issue, stateMap, identifier, projectId)),
           });
           return;
         }

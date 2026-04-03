@@ -42,15 +42,15 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-## v0.3.0
+## v0.3.0 *(shipped)*
 
 ### Features
 
-- **`plane project create`** — create projects from the CLI (`plane project create <name> --identifier <ID> --description "..." --network 0|2`). Highest-impact missing command — blocks AI agent workflows that need to set up new projects.
-- **`plane project update`** — update project name, description, and settings to complete the project CRUD surface.
-- **`plane issue move`** (cross-project) — move an issue to a different project (`plane issue move <issue> --to-project <identifier>`). Needs API research — if the Plane API doesn't support native moves, provide a `--copy` flag that recreates the issue in the target project.
-- **Bulk operations** — update multiple issues in one call (e.g., `plane issue update ROADMAP-5,6,7 --state Done`). Accepts comma-separated issue refs and loops API calls.
-- **Multi-filter** — support multiple values for filters on `issue list` (e.g., `--state Started,InReview`, combined `--state` + `--priority` + `--assignee`).
+- ~~**`plane project create`**~~ — shipped: `plane project create <name> --identifier <ID> --description "..." --network 0|2`
+- ~~**`plane project update`**~~ — shipped: update active project name, description, and network visibility
+- ~~**`plane issue move`**~~ — shipped: `plane issue move <issue> --to-project <identifier>`; uses copy+delete (state mapped by group); `--copy` skips the delete
+- ~~**Bulk operations**~~ — shipped: `plane issue update PROJ-1,2,3 --state Done` resolves all refs first, then patches in parallel
+- ~~**Multi-filter**~~ — shipped: `--state`, `--priority`, and `--assignee` on `issue list` and `issue mine` accept comma-separated values; filtering is applied in-memory
 
 ---
 

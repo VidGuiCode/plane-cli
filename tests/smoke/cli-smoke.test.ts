@@ -9,7 +9,7 @@ const CLI_PATH = path.resolve(__dirname, "../../dist/cli.js");
 describe("CLI smoke tests", () => {
   it("shows version", () => {
     const output = execSync(`node "${CLI_PATH}" --version`, { encoding: "utf-8" });
-    expect(output.trim()).toBe("0.2.6");
+    expect(output.trim()).toBe("0.3.0");
   });
 
   it("shows help", () => {

@@ -41,9 +41,15 @@ export function createIssueCommand(): Command {
       "--project <identifier-or-name>",
       "Project identifier or name (overrides active context)",
     )
-    .option("--state <name>", "Filter by state name")
-    .option("--priority <value>", "Filter by priority: urgent | high | medium | low | none")
-    .option("--assignee <name>", "Filter by assignee display name, email, or 'me'")
+    .option("--state <names>", "Filter by state name(s), comma-separated (e.g. Todo,InProgress)")
+    .option(
+      "--priority <values>",
+      "Filter by priority, comma-separated: urgent | high | medium | low | none",
+    )
+    .option(
+      "--assignee <names>",
+      "Filter by assignee(s), comma-separated display names/emails or 'me'",
+    )
     .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
     .option("--json", "Output raw JSON")
     .option("--fields <names>", "Comma-separated fields for JSON output")
@@ -76,19 +82,32 @@ export function createIssueCommand(): Command {
             identifier = active.identifier;
           }
 
-          // Resolve assignee
-          let assigneeId: string | undefined;
+          // Resolve assignee(s)
+          let assigneeIds: string[] | undefined;
           if (opts.assignee) {
-            assigneeId =
-              opts.assignee.toLowerCase() === "me"
-                ? await resolveCurrentUserId(client)
-                : await resolveMember(client, ws, opts.assignee);
+            const names = opts.assignee
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+            assigneeIds = await Promise.all(
+              names.map((n) =>
+                n.toLowerCase() === "me"
+                  ? resolveCurrentUserId(client)
+                  : resolveMember(client, ws, n),
+              ),
+            );
           }
 
           await listIssuesCore(client, ws, projectId, identifier, {
-            state: opts.state,
-            priority: opts.priority,
-            assigneeId,
+            states: opts.state
+              ?.split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            priorities: opts.priority
+              ?.split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            assigneeIds,
             updatedSince: opts.updatedSince,
             json: opts.json,
             fields: opts.fields,
@@ -109,8 +128,11 @@ export function createIssueCommand(): Command {
       "--project <identifier-or-name>",
       "Project identifier or name (overrides active context)",
     )
-    .option("--state <name>", "Filter by state name")
-    .option("--priority <value>", "Filter by priority: urgent | high | medium | low | none")
+    .option("--state <names>", "Filter by state name(s), comma-separated")
+    .option(
+      "--priority <values>",
+      "Filter by priority, comma-separated: urgent | high | medium | low | none",
+    )
     .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
     .option("--json", "Output raw JSON")
     .option("--fields <names>", "Comma-separated fields for JSON output")
@@ -142,12 +164,18 @@ export function createIssueCommand(): Command {
             identifier = active.identifier;
           }
 
-          const assigneeId = await resolveCurrentUserId(client);
+          const myId = await resolveCurrentUserId(client);
 
           await listIssuesCore(client, ws, projectId, identifier, {
-            state: opts.state,
-            priority: opts.priority,
-            assigneeId,
+            states: opts.state
+              ?.split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            priorities: opts.priority
+              ?.split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            assigneeIds: [myId],
             updatedSince: opts.updatedSince,
             json: opts.json,
             fields: opts.fields,
@@ -381,7 +409,7 @@ export function createIssueCommand(): Command {
 
   command
     .command("update <issue>")
-    .description("Update an existing issue")
+    .description("Update one or more issues. Accepts comma-separated refs: PROJ-1,2,3")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
       "--project <identifier-or-name>",
@@ -394,13 +422,16 @@ export function createIssueCommand(): Command {
     .option("--state <state>", "State name or ID")
     .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
     .option("--label <name>", "Label name — replaces existing labels (repeatable)", collect, [])
-    .option("--parent <ref>", "Parent issue ref (sequence number, PROJ-42, or UUID)")
+    .option(
+      "--parent <ref>",
+      "Parent issue ref (sequence number, PROJ-42, or UUID) — single-issue only",
+    )
     .option("--due <YYYY-MM-DD>", "Due date (use 'none' to clear)")
     .option("--start <YYYY-MM-DD>", "Start date (use 'none' to clear)")
     .option("--json", "Output raw JSON")
     .action(
       async (
-        issueRef: string,
+        issueRefArg: string,
         opts: {
           workspace?: string;
           project?: string;
@@ -435,34 +466,35 @@ export function createIssueCommand(): Command {
             activeProjectIdentifier = config.context.activeProjectIdentifier;
           }
 
-          const { issueId, projectId, identifier } = await resolveIssueRef(
-            client,
-            ws,
-            activeProjectId,
-            activeProjectIdentifier,
-            style,
-            issueRef,
-          );
+          const refs = issueRefArg
+            .split(",")
+            .map((r) => r.trim())
+            .filter(Boolean);
+          const isBulk = refs.length > 1;
 
-          const body: Record<string, unknown> = {};
-          const titleValue = opts.title ?? opts.name;
-          if (titleValue) body.name = titleValue;
-          if (opts.description) body.description_html = `<p>${opts.description}</p>`;
-          if (opts.priority) body.priority = opts.priority;
-          if (opts.due) body.due_date = opts.due === "none" ? null : opts.due;
-          if (opts.start) body.start_date = opts.start === "none" ? null : opts.start;
-
-          if (opts.state) {
-            const stateRes = await client.get<unknown>(
-              `workspaces/${ws}/projects/${projectId}/states/`,
+          if (isBulk && opts.parent) {
+            throw new ValidationError(
+              "--parent cannot be used with bulk updates (multiple issue refs).",
             );
-            const states = unwrap<PlaneState>(stateRes);
-            const match = states.find(
-              (s) => s.id === opts.state || s.name.toLowerCase() === opts.state!.toLowerCase(),
-            );
-            body.state = match ? match.id : opts.state;
           }
 
+          // Resolve all refs up-front — fail before sending any API calls
+          const resolved = await Promise.all(
+            refs.map((ref) =>
+              resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, ref),
+            ),
+          );
+
+          // Build non-project-specific parts of the body
+          const baseBody: Record<string, unknown> = {};
+          const titleValue = opts.title ?? opts.name;
+          if (titleValue) baseBody.name = titleValue;
+          if (opts.description) baseBody.description_html = `<p>${opts.description}</p>`;
+          if (opts.priority) baseBody.priority = opts.priority;
+          if (opts.due) baseBody.due_date = opts.due === "none" ? null : opts.due;
+          if (opts.start) baseBody.start_date = opts.start === "none" ? null : opts.start;
+
+          // Resolve assignees (workspace-scoped, same for all issues)
           if (opts.assignee.length > 0) {
             const ids = await Promise.all(
               opts.assignee.map((a) =>
@@ -471,57 +503,107 @@ export function createIssueCommand(): Command {
                   : resolveMember(client, ws, a),
               ),
             );
-            body.assignees = ids;
+            baseBody.assignees = ids;
           }
 
-          if (opts.label.length > 0) {
-            const ids = await Promise.all(
-              opts.label.map((l) => resolveLabel(client, ws, projectId, l)),
+          // Resolve state and labels per unique project (handles cross-project bulk)
+          const uniqueProjectIds = [...new Set(resolved.map((r) => r.projectId))];
+
+          const stateIdByProject = new Map<string, string>();
+          if (opts.state) {
+            await Promise.all(
+              uniqueProjectIds.map(async (pid) => {
+                const stateRes = await client.get<unknown>(
+                  `workspaces/${ws}/projects/${pid}/states/`,
+                );
+                const states = unwrap<PlaneState>(stateRes);
+                const match = states.find(
+                  (s) => s.id === opts.state || s.name.toLowerCase() === opts.state!.toLowerCase(),
+                );
+                stateIdByProject.set(pid, match ? match.id : opts.state!);
+              }),
             );
-            body.label_ids = ids;
           }
 
+          const labelIdsByProject = new Map<string, string[]>();
+          if (opts.label.length > 0) {
+            await Promise.all(
+              uniqueProjectIds.map(async (pid) => {
+                const ids = await Promise.all(
+                  opts.label.map((l) => resolveLabel(client, ws, pid, l)),
+                );
+                labelIdsByProject.set(pid, ids);
+              }),
+            );
+          }
+
+          // Resolve parent (single-issue only)
           if (opts.parent) {
             const { issueId: parentId } = await resolveIssueRef(
               client,
               ws,
-              projectId,
-              identifier,
+              resolved[0].projectId,
+              resolved[0].identifier,
               style,
               opts.parent,
             );
-            body.parent = parentId;
+            baseBody.parent = parentId;
           }
 
-          if (Object.keys(body).length === 0) {
+          if (Object.keys(baseBody).length === 0 && !opts.state && opts.label.length === 0) {
             throw new ValidationError(
               "Nothing to update. Use --title (or --name), --description, --priority, --state, --assignee, --label, --parent, --due, or --start.",
             );
           }
 
-          const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`;
+          // Dry-run: print all payloads and exit
           if (isDryRunEnabled()) {
-            printJson({
-              dryRun: true,
-              method: "PATCH",
-              path,
-              body,
-              context: {
-                workspace: ws,
-                projectId,
-                projectIdentifier: identifier,
-                issueId,
-              },
+            const dryRunPayloads = resolved.map(({ issueId, projectId, identifier }) => {
+              const body = { ...baseBody };
+              if (stateIdByProject.has(projectId)) body.state = stateIdByProject.get(projectId);
+              if (labelIdsByProject.has(projectId))
+                body.label_ids = labelIdsByProject.get(projectId);
+              return {
+                dryRun: true,
+                method: "PATCH",
+                path: `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
+                body,
+                context: { workspace: ws, projectId, projectIdentifier: identifier, issueId },
+              };
             });
+            printJson(isBulk ? dryRunPayloads : dryRunPayloads[0]);
             return;
           }
 
-          const issue = await client.patch<PlaneIssue>(path, body);
+          // Patch all issues in parallel
+          const updated = await Promise.all(
+            resolved.map(({ issueId, projectId }) => {
+              const body = { ...baseBody };
+              if (stateIdByProject.has(projectId)) body.state = stateIdByProject.get(projectId);
+              if (labelIdsByProject.has(projectId))
+                body.label_ids = labelIdsByProject.get(projectId);
+              return client.patch<PlaneIssue>(
+                `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`,
+                body,
+              );
+            }),
+          );
+
           if (opts.json) {
-            printJson(issue);
+            printJson(isBulk ? updated : updated[0]);
             return;
           }
-          printInfo(`Updated ${identifier}-${issue.sequence_id}: ${issue.name}`);
+
+          if (isBulk) {
+            const rows = updated.map((issue, i) => [
+              `${resolved[i].identifier}-${issue.sequence_id}`,
+              issue.name,
+            ]);
+            printTable(rows, ["ID", "TITLE"]);
+          } else {
+            const issue = updated[0];
+            printInfo(`Updated ${resolved[0].identifier}-${issue.sequence_id}: ${issue.name}`);
+          }
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
         }
@@ -832,6 +914,158 @@ export function createIssueCommand(): Command {
       },
     );
 
+  // ── move ─────────────────────────────────────────────────────────────────
+
+  command
+    .command("move <issue>")
+    .description("Move (or copy) an issue to a different project")
+    .requiredOption("--to-project <identifier-or-name>", "Target project identifier or name")
+    .option("--copy", "Copy the issue without deleting the original")
+    .option("--workspace <slug>", "Workspace slug (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Source project identifier or name (overrides active context)",
+    )
+    .option("--json", "Output raw JSON")
+    .action(
+      async (
+        issueRef: string,
+        opts: {
+          toProject: string;
+          copy?: boolean;
+          workspace?: string;
+          project?: string;
+          json?: boolean;
+        },
+      ) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+          const style = client.issuesSegment();
+
+          let activeProjectId: string | undefined;
+          let activeProjectIdentifier: string | undefined;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            activeProjectId = proj.id;
+            activeProjectIdentifier = proj.identifier;
+          } else if (config.context.activeProject) {
+            activeProjectId = config.context.activeProject;
+            activeProjectIdentifier = config.context.activeProjectIdentifier;
+          }
+
+          const {
+            issueId,
+            projectId: srcProjectId,
+            identifier: srcIdentifier,
+          } = await resolveIssueRef(
+            client,
+            ws,
+            activeProjectId,
+            activeProjectIdentifier,
+            style,
+            issueRef,
+          );
+
+          const targetProject = await resolveProject(client, ws, opts.toProject);
+          const tgtProjectId = targetProject.id;
+          const tgtIdentifier = targetProject.identifier;
+
+          if (srcProjectId === tgtProjectId) {
+            throw new ValidationError("Source and target projects are the same.");
+          }
+
+          // Fetch full source issue
+          const source = await client.get<PlaneIssue>(
+            `workspaces/${ws}/projects/${srcProjectId}/${style}/${issueId}/`,
+          );
+
+          // Map state from source to target by group (best-effort)
+          const [srcStates, tgtStates] = await Promise.all([
+            client
+              .get<unknown>(`workspaces/${ws}/projects/${srcProjectId}/states/`)
+              .then((r) => unwrap<PlaneState>(r)),
+            client
+              .get<unknown>(`workspaces/${ws}/projects/${tgtProjectId}/states/`)
+              .then((r) => unwrap<PlaneState>(r)),
+          ]);
+
+          const srcStateId =
+            typeof source.state === "string"
+              ? source.state
+              : (source.state as PlaneState | undefined)?.id;
+          const srcStateGroup = srcStates.find((s) => s.id === srcStateId)?.group ?? "backlog";
+
+          const mappedState =
+            tgtStates.find((s) => s.group === srcStateGroup) ??
+            tgtStates.find((s) => s.group === "backlog") ??
+            tgtStates.find((s) => s.group === "unstarted") ??
+            tgtStates[0];
+
+          if (!mappedState) {
+            throw new ValidationError(
+              `Target project "${tgtIdentifier}" has no states. Configure states before moving issues.`,
+            );
+          }
+
+          const newBody: Record<string, unknown> = {
+            name: source.name,
+            state: mappedState.id,
+            priority: source.priority ?? "none",
+          };
+          if (source.description_html) newBody.description_html = source.description_html;
+          if (source.due_date) newBody.due_date = source.due_date;
+          if (source.start_date) newBody.start_date = source.start_date;
+          // assignees and labels are workspace/project-scoped IDs — omit to avoid ID mismatches
+          // users can re-assign after move
+
+          const createPath = `workspaces/${ws}/projects/${tgtProjectId}/${style}/`;
+          const deletePath = `workspaces/${ws}/projects/${srcProjectId}/${style}/${issueId}/`;
+
+          if (isDryRunEnabled()) {
+            printJson({
+              dryRun: true,
+              action: opts.copy ? "issue.copy" : "issue.move",
+              steps: [
+                { method: "POST", path: createPath, body: newBody },
+                ...(opts.copy ? [] : [{ method: "DELETE", path: deletePath }]),
+              ],
+              context: {
+                source: `${srcIdentifier}-${source.sequence_id}`,
+                targetProject: tgtIdentifier,
+                stateMapping: `${srcStateGroup} → ${mappedState.name}`,
+              },
+            });
+            return;
+          }
+
+          const newIssue = await client.post<PlaneIssue>(createPath, newBody);
+
+          if (!opts.copy) {
+            await client.delete(deletePath);
+          }
+
+          if (opts.json) {
+            printJson({
+              action: opts.copy ? "copied" : "moved",
+              source: `${srcIdentifier}-${source.sequence_id}`,
+              result: `${tgtIdentifier}-${newIssue.sequence_id}`,
+              issue: newIssue,
+            });
+            return;
+          }
+
+          const verb = opts.copy ? "Copied" : "Moved";
+          printInfo(
+            `${verb} ${srcIdentifier}-${source.sequence_id} → ${tgtIdentifier}-${newIssue.sequence_id}: ${newIssue.name}`,
+          );
+        } catch (err) {
+          exitWithError(err, Boolean(opts.json));
+        }
+      },
+    );
+
   return command;
 }
 
@@ -845,48 +1079,63 @@ async function listIssuesCore(
   projectId: string,
   identifier: string,
   opts: {
-    state?: string;
-    priority?: string;
-    assigneeId?: string;
+    states?: string[];
+    priorities?: string[];
+    assigneeIds?: string[];
     updatedSince?: string;
     json?: boolean;
     fields?: string;
   },
 ): Promise<void> {
   const style = client.issuesSegment();
+  const basePath = `workspaces/${ws}/projects/${projectId}/${style}/`;
 
-  // Build filter query string
-  const params = new URLSearchParams();
-  if (opts.state) {
-    const stateRes = await client.get<unknown>(
-      `workspaces/${ws}/projects/${projectId}/states/`,
-    );
-    const states = unwrap<PlaneState>(stateRes);
-    const match = states.find((s) => s.name.toLowerCase() === opts.state!.toLowerCase());
-    if (match) params.set("state", match.id);
-  }
-  if (opts.priority) params.set("priority", opts.priority);
-  if (opts.assigneeId) params.set("assignee", opts.assigneeId);
-
-  const qs = params.toString();
-  const basePath = `workspaces/${ws}/projects/${projectId}/${style}/${qs ? `?${qs}` : ""}`;
-
-  const [allIssues, stateMap] = await Promise.all([
+  const [allIssues, stateList] = await Promise.all([
     fetchAll<PlaneIssue>(client, basePath),
     client
       .get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`)
-      .then((r) => buildStateMap(unwrap<PlaneState>(r))),
+      .then((r) => unwrap<PlaneState>(r)),
   ]);
 
+  const stateMap = buildStateMap(stateList);
+
+  // Build state-name → ID set for filter matching
+  let stateFilterIds: Set<string> | undefined;
+  if (opts.states && opts.states.length > 0) {
+    const lowerNames = new Set(opts.states.map((s) => s.toLowerCase()));
+    stateFilterIds = new Set(
+      stateList.filter((s) => lowerNames.has(s.name.toLowerCase())).map((s) => s.id),
+    );
+  }
+
   let issues = allIssues;
+
+  if (stateFilterIds) {
+    issues = issues.filter((issue) => {
+      const stateId =
+        typeof issue.state === "string"
+          ? issue.state
+          : ((issue.state as PlaneState | undefined)?.id ?? "");
+      return stateFilterIds!.has(stateId);
+    });
+  }
+
+  if (opts.priorities && opts.priorities.length > 0) {
+    const prioritySet = new Set(opts.priorities.map((p) => p.toLowerCase()));
+    issues = issues.filter((issue) => prioritySet.has((issue.priority ?? "none").toLowerCase()));
+  }
+
+  if (opts.assigneeIds && opts.assigneeIds.length > 0) {
+    const assigneeSet = new Set(opts.assigneeIds);
+    issues = issues.filter((issue) => (issue.assignees ?? []).some((a) => assigneeSet.has(a)));
+  }
+
   if (opts.updatedSince) {
     const since = new Date(opts.updatedSince);
     if (isNaN(since.getTime())) {
-      throw new ValidationError(
-        `Invalid date "${opts.updatedSince}". Use YYYY-MM-DD format.`,
-      );
+      throw new ValidationError(`Invalid date "${opts.updatedSince}". Use YYYY-MM-DD format.`);
     }
-    issues = allIssues.filter((issue) => new Date(issue.updated_at) >= since);
+    issues = issues.filter((issue) => new Date(issue.updated_at) >= since);
   }
 
   if (issues.length === 0) {
@@ -899,9 +1148,7 @@ async function listIssuesCore(
       normalizeIssue(issue, stateMap, identifier, projectId),
     );
     printJson(
-      opts.fields
-        ? normalized.map((n) => projectIssueFields(n, opts.fields!))
-        : normalized,
+      opts.fields ? normalized.map((n) => projectIssueFields(n, opts.fields!)) : normalized,
     );
     return;
   }
@@ -914,4 +1161,3 @@ async function listIssuesCore(
   ]);
   printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
 }
-

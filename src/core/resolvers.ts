@@ -26,7 +26,8 @@ export async function resolveProject(
       p.identifier.toLowerCase() === ref.toLowerCase() ||
       p.name.toLowerCase() === ref.toLowerCase(),
   );
-  if (!match) throw new Error(`Project "${ref}" not found in workspace "${ws}". Run: plane project list`);
+  if (!match)
+    throw new Error(`Project "${ref}" not found in workspace "${ws}". Run: plane project list`);
   return { id: match.id, identifier: match.identifier, name: match.name };
 }
 
@@ -185,7 +186,10 @@ export async function resolveMember(
       getMemberDisplayName(m).toLowerCase() === lower ||
       (getMemberEmail(m)?.toLowerCase() ?? "") === lower,
   );
-  if (!match) throw new Error(`Member "${nameOrEmail}" not found in workspace "${ws}". Check with: plane members list`);
+  if (!match)
+    throw new Error(
+      `Member "${nameOrEmail}" not found in workspace "${ws}". Check with: plane members list`,
+    );
   return getMemberId(match);
 }
 
@@ -204,7 +208,8 @@ export async function resolveCycle(
   const cycles = unwrap<PlaneCycle>(res);
   const lower = nameOrId.toLowerCase();
   const match = cycles.find((c) => c.name.toLowerCase() === lower);
-  if (!match) throw new Error(`Cycle "${nameOrId}" not found in this project. Check with: plane cycle list`);
+  if (!match)
+    throw new Error(`Cycle "${nameOrId}" not found in this project. Check with: plane cycle list`);
   return { id: match.id, name: match.name };
 }
 
@@ -223,7 +228,10 @@ export async function resolveModule(
   const modules = unwrap<PlaneModule>(res);
   const lower = nameOrId.toLowerCase();
   const match = modules.find((m) => m.name.toLowerCase() === lower);
-  if (!match) throw new Error(`Module "${nameOrId}" not found in this project. Check with: plane module list`);
+  if (!match)
+    throw new Error(
+      `Module "${nameOrId}" not found in this project. Check with: plane module list`,
+    );
   return { id: match.id, name: match.name };
 }
 
@@ -299,6 +307,9 @@ export async function resolveLabel(
   const match = labels.find(
     (l) => l.name.toLowerCase() === lower || l.color.toLowerCase() === lower,
   );
-  if (!match) throw new Error(`Label "${nameOrColor}" not found in this project. Check with: plane label list`);
+  if (!match)
+    throw new Error(
+      `Label "${nameOrColor}" not found in this project. Check with: plane label list`,
+    );
   return match.id;
 }

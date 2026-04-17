@@ -192,7 +192,7 @@ export function createDiscoverCommand(): Command {
                 "priority",
                 "state",
                 "assignees",
-                "label_ids",
+                "labels",
                 "parent",
                 "due_date",
                 "start_date",

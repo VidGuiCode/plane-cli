@@ -54,4 +54,17 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-Items beyond v0.3.0 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).
+## v0.3.1 *(shipped)*
+
+### Bug fixes
+
+- ~~**`--label` flag silently dropped on `issue create` / `issue update`**~~ — shipped: request body now sends `labels` (not `label_ids`); the wrong key was being silently ignored by the Plane v1 issues API. Same fix applied to `label add` / `label remove` (#19). See [context/research/lessons-learned/bug-label-flag-silently-dropped.md](../context/research/lessons-learned/bug-label-flag-silently-dropped.md).
+
+### Polish
+
+- ~~**`--label-id <uuid>`**~~ — shipped: alternative to `--label <name>` on `issue create` / `issue update`, skips name resolution
+- ~~**Document case-insensitive label matching in `--help`**~~ — shipped on `issue create`, `issue update`, `label add`, `label remove`
+
+---
+
+Items beyond v0.3.1 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).

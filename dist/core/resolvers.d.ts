@@ -1,5 +1,6 @@
 import type { PlaneApiClient } from "./api-client.js";
 import type { PlaneIssue, PlaneState, PlaneMember } from "./types.js";
+export declare const UUID_RE: RegExp;
 export declare function resolveProject(client: PlaneApiClient, ws: string, ref: string): Promise<{
     id: string;
     identifier: string;

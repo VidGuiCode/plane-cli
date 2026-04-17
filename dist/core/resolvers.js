@@ -1,5 +1,5 @@
 import { unwrap, fetchAll } from "./api-client.js";
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // ── Project ──────────────────────────────────────────────────────────────────
 export async function resolveProject(client, ws, ref) {
     const res = await client.get(`workspaces/${ws}/projects/`);

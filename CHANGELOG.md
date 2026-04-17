@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.1
+
+### Bug fixes
+- Fixed `--label` flag silently dropped on `issue create`, `issue update`, `label add`, and `label remove` — the request body sent `label_ids: [...]` but Plane's API expects `labels: [...]` and silently ignored the wrong key, leaving issues with no labels attached despite the CLI exiting zero (fixes #19)
+
+### Features
+- Added `--label-id <uuid>` on `issue create` and `issue update` as an alternative to `--label` — skips name resolution (no extra API call), and validates the UUID format up front
+
+### Polish
+- `--label` help text now says "case-insensitive" so users know they can pass `security`, `Security`, or `SECURITY` interchangeably
+- `discover issue-inputs` now lists `labels` (not `label_ids`) as an optional field, matching the actual API payload key
+
+## 0.3.0
+
+### Features
+- Added `plane project create <name> --identifier <ID> --description "..." --network 0|2` — full project CRUD from the CLI (fixes #13)
+- Added `plane project update` — rename, change description, or update visibility on the active project (fixes #14)
+- Added `plane issue move <issue> --to-project <identifier>` — cross-project move via copy+delete with state mapped by group; `--copy` skips the delete (fixes #15)
+- Bulk operations: `plane issue update PROJ-1,2,3 --state Done` resolves all refs first, then patches in parallel (fixes #16)
+- Multi-filter on `issue list` and `issue mine`: `--state`, `--priority`, and `--assignee` accept comma-separated values, applied in-memory (fixes #17)
+
 ## 0.2.6
 
 ### Bug fixes

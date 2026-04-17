@@ -133,7 +133,7 @@ export function createLabelCommand() {
     // ── add ───────────────────────────────────────────────────────────────────
     command
         .command("add <issue> <label>")
-        .description("Add a label to an issue. Issue: 42, PROJ-42, or UUID. Label: name or UUID")
+        .description("Add a label to an issue. Issue: 42, PROJ-42, or UUID. Label: name (case-insensitive) or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
@@ -163,7 +163,7 @@ export function createLabelCommand() {
             if (!current.includes(labelId)) {
                 current.push(labelId);
                 const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`;
-                const body = { label_ids: current };
+                const body = { labels: current };
                 if (isDryRunEnabled()) {
                     printJson({
                         dryRun: true,
@@ -200,7 +200,7 @@ export function createLabelCommand() {
     // ── remove ────────────────────────────────────────────────────────────────
     command
         .command("remove <issue> <label>")
-        .description("Remove a label from an issue. Issue: 42, PROJ-42, or UUID. Label: name or UUID")
+        .description("Remove a label from an issue. Issue: 42, PROJ-42, or UUID. Label: name (case-insensitive) or UUID")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
@@ -229,7 +229,7 @@ export function createLabelCommand() {
                 []);
             const updated = current.filter((l) => l !== labelId);
             const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`;
-            const body = { label_ids: updated };
+            const body = { labels: updated };
             if (isDryRunEnabled()) {
                 printJson({
                     dryRun: true,

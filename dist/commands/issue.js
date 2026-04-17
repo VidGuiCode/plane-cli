@@ -7,7 +7,7 @@ import { ask } from "../core/prompt.js";
 import { exitWithError, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
-import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, resolveCurrentUserId, normalizeIssue, projectIssueFields, } from "../core/resolvers.js";
+import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, resolveCurrentUserId, normalizeIssue, projectIssueFields, UUID_RE, } from "../core/resolvers.js";
 export function createIssueCommand() {
     const command = new Command("issue")
         .description("Work with Plane issues")
@@ -198,7 +198,8 @@ export function createIssueCommand() {
         .option("--description <description>", "Issue description")
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
         .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
-        .option("--label <name>", "Label name (repeatable)", collect, [])
+        .option("--label <name>", "Label name (case-insensitive, repeatable)", collect, [])
+        .option("--label-id <uuid>", "Label UUID (repeatable, alternative to --label, skips name resolution)", collect, [])
         .option("--parent <ref>", "Parent issue ref (sequence number, PROJ-42, or UUID)")
         .option("--due <YYYY-MM-DD>", "Due date")
         .option("--start <YYYY-MM-DD>", "Start date")
@@ -241,9 +242,14 @@ export function createIssueCommand() {
                     : resolveMember(client, ws, a)));
                 body.assignees = ids;
             }
-            if (opts.label.length > 0) {
-                const ids = await Promise.all(opts.label.map((l) => resolveLabel(client, ws, projectId, l)));
-                body.label_ids = ids;
+            for (const lid of opts.labelId) {
+                if (!UUID_RE.test(lid)) {
+                    throw new ValidationError(`--label-id requires a UUID; got "${lid}". Use --label for name resolution.`);
+                }
+            }
+            if (opts.label.length > 0 || opts.labelId.length > 0) {
+                const resolved = await Promise.all(opts.label.map((l) => resolveLabel(client, ws, projectId, l)));
+                body.labels = [...new Set([...resolved, ...opts.labelId])];
             }
             if (opts.parent) {
                 const { issueId: parentId } = await resolveIssueRef(client, ws, projectId, identifier, style, opts.parent);
@@ -287,7 +293,8 @@ export function createIssueCommand() {
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
         .option("--state <state>", "State name or ID")
         .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
-        .option("--label <name>", "Label name — replaces existing labels (repeatable)", collect, [])
+        .option("--label <name>", "Label name (case-insensitive, repeatable) — replaces existing labels", collect, [])
+        .option("--label-id <uuid>", "Label UUID (repeatable, alternative to --label, skips name resolution)", collect, [])
         .option("--parent <ref>", "Parent issue ref (sequence number, PROJ-42, or UUID) — single-issue only")
         .option("--due <YYYY-MM-DD>", "Due date (use 'none' to clear)")
         .option("--start <YYYY-MM-DD>", "Start date (use 'none' to clear)")
@@ -350,11 +357,16 @@ export function createIssueCommand() {
                     stateIdByProject.set(pid, match ? match.id : opts.state);
                 }));
             }
+            for (const lid of opts.labelId) {
+                if (!UUID_RE.test(lid)) {
+                    throw new ValidationError(`--label-id requires a UUID; got "${lid}". Use --label for name resolution.`);
+                }
+            }
             const labelIdsByProject = new Map();
-            if (opts.label.length > 0) {
+            if (opts.label.length > 0 || opts.labelId.length > 0) {
                 await Promise.all(uniqueProjectIds.map(async (pid) => {
-                    const ids = await Promise.all(opts.label.map((l) => resolveLabel(client, ws, pid, l)));
-                    labelIdsByProject.set(pid, ids);
+                    const resolvedNames = await Promise.all(opts.label.map((l) => resolveLabel(client, ws, pid, l)));
+                    labelIdsByProject.set(pid, [...new Set([...resolvedNames, ...opts.labelId])]);
                 }));
             }
             // Resolve parent (single-issue only)
@@ -362,8 +374,11 @@ export function createIssueCommand() {
                 const { issueId: parentId } = await resolveIssueRef(client, ws, resolved[0].projectId, resolved[0].identifier, style, opts.parent);
                 baseBody.parent = parentId;
             }
-            if (Object.keys(baseBody).length === 0 && !opts.state && opts.label.length === 0) {
-                throw new ValidationError("Nothing to update. Use --title (or --name), --description, --priority, --state, --assignee, --label, --parent, --due, or --start.");
+            if (Object.keys(baseBody).length === 0 &&
+                !opts.state &&
+                opts.label.length === 0 &&
+                opts.labelId.length === 0) {
+                throw new ValidationError("Nothing to update. Use --title (or --name), --description, --priority, --state, --assignee, --label, --label-id, --parent, --due, or --start.");
             }
             // Dry-run: print all payloads and exit
             if (isDryRunEnabled()) {
@@ -372,7 +387,7 @@ export function createIssueCommand() {
                     if (stateIdByProject.has(projectId))
                         body.state = stateIdByProject.get(projectId);
                     if (labelIdsByProject.has(projectId))
-                        body.label_ids = labelIdsByProject.get(projectId);
+                        body.labels = labelIdsByProject.get(projectId);
                     return {
                         dryRun: true,
                         method: "PATCH",
@@ -390,7 +405,7 @@ export function createIssueCommand() {
                 if (stateIdByProject.has(projectId))
                     body.state = stateIdByProject.get(projectId);
                 if (labelIdsByProject.has(projectId))
-                    body.label_ids = labelIdsByProject.get(projectId);
+                    body.labels = labelIdsByProject.get(projectId);
                 return client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, body);
             }));
             if (opts.json) {

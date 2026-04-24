@@ -162,7 +162,7 @@ export function createDiscoverCommand() {
                             "assignees",
                             "labels",
                             "parent",
-                            "due_date",
+                            "target_date",
                             "start_date",
                         ],
                     },

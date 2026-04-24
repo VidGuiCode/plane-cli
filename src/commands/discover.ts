@@ -194,7 +194,7 @@ export function createDiscoverCommand(): Command {
                 "assignees",
                 "labels",
                 "parent",
-                "due_date",
+                "target_date",
                 "start_date",
               ],
             },

@@ -273,7 +273,7 @@ export function createIssueCommand(): Command {
           );
           printInfo(`Labels:      ${labelNames.length > 0 ? labelNames.join(", ") : "-"}`);
 
-          if (issue.due_date) printInfo(`Due:         ${issue.due_date}`);
+          if (issue.target_date) printInfo(`Due:         ${issue.target_date}`);
           if (issue.start_date) printInfo(`Start:       ${issue.start_date}`);
           printInfo(`Created:     ${issue.created_at}`);
           printInfo(`Updated:     ${issue.updated_at}`);
@@ -352,7 +352,7 @@ export function createIssueCommand(): Command {
           const body: Record<string, unknown> = { name: title };
           if (description) body.description_html = `<p>${description}</p>`;
           if (opts.priority) body.priority = opts.priority;
-          if (opts.due) body.due_date = opts.due;
+          if (opts.due) body.target_date = opts.due;
           if (opts.start) body.start_date = opts.start;
 
           if (opts.assignee.length > 0) {
@@ -518,7 +518,7 @@ export function createIssueCommand(): Command {
           if (titleValue) baseBody.name = titleValue;
           if (opts.description) baseBody.description_html = `<p>${opts.description}</p>`;
           if (opts.priority) baseBody.priority = opts.priority;
-          if (opts.due) baseBody.due_date = opts.due === "none" ? null : opts.due;
+          if (opts.due) baseBody.target_date = opts.due === "none" ? null : opts.due;
           if (opts.start) baseBody.start_date = opts.start === "none" ? null : opts.start;
 
           // Resolve assignees (workspace-scoped, same for all issues)
@@ -1052,7 +1052,7 @@ export function createIssueCommand(): Command {
             priority: source.priority ?? "none",
           };
           if (source.description_html) newBody.description_html = source.description_html;
-          if (source.due_date) newBody.due_date = source.due_date;
+          if (source.target_date) newBody.target_date = source.target_date;
           if (source.start_date) newBody.start_date = source.start_date;
           // assignees and labels are workspace/project-scoped IDs — omit to avoid ID mismatches
           // users can re-assign after move

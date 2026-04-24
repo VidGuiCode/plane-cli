@@ -57,7 +57,7 @@ export interface PlaneIssue {
     label_ids?: string[];
     parent?: string | null;
     assignees?: string[];
-    due_date?: string | null;
+    target_date?: string | null;
     start_date?: string | null;
     created_at: string;
     updated_at: string;

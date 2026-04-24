@@ -264,7 +264,7 @@ export function normalizeIssue(
     state_id: typeof issue.state === "string" ? issue.state : null,
     labels: labelNames,
     label_ids: labelNames,
-    dueDate: issue.due_date ?? null,
+    dueDate: issue.target_date ?? null,
     startDate: issue.start_date ?? null,
     createdAt: issue.created_at,
     updatedAt: issue.updated_at,

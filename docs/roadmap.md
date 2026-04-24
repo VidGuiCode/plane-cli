@@ -67,4 +67,21 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-Items beyond v0.3.1 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).
+## v0.3.2 *(shipped)*
+
+### Bug fixes
+
+- ~~**`--due` flag silent no-op on `issue update`**~~ — shipped: request body now sends `target_date` (not `due_date`); the Plane v1 issues API silently ignored the wrong key. Same class of bug as the v0.3.1 `--label` drop. Fix applied on create, update, and move payloads. Also fixed the read/display path (`issue get` now shows the due date) and the `--json` `dueDate` alias (previously always `null`). See [context/research/lessons-learned/bug-due-flag-silent-noop-on-update.md](../context/research/lessons-learned/bug-due-flag-silent-noop-on-update.md).
+
+### Test coverage
+
+- ~~**Live round-trip test for `--due`**~~ — shipped: `tests/smoke/due-date-roundtrip.test.ts`, gated on `PLANE_CLI_LIVE_TESTS=1`, covers create / update / clear (`--due none`).
+- ~~**Silent-drop audit harness for remaining `issue update` flags**~~ — shipped: `tests/smoke/issue-update-audit.test.ts` round-trips `--priority`, `--description`, `--assignee me`, `--state` (opt-in via `PLANE_TEST_STATE`), and `--parent` (opt-in via `PLANE_TEST_PARENT`). Same gating pattern.
+
+### Deferred to v0.3.3
+
+- **Round-trip assertion on `issue update`** — after the PATCH, compare the returned issue's requested fields to what was requested; exit non-zero on mismatch, at runtime (not just in tests). Deferred to avoid scope creep in the bug-fix release.
+
+---
+
+Items beyond v0.3.2 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).

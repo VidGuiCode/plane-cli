@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2
+
+### Bug fixes
+- Fixed `--due` flag silently dropped on `issue create`, `issue update`, and `issue move` — the request body sent `due_date: "..."` but Plane's API expects `target_date` and silently ignored the wrong key, leaving the due date unset despite the CLI printing `Updated` and exiting zero. Same class of bug as the v0.3.1 `--label` fix
+- Fixed `issue get` never displaying the due date — the `Due:` line read `issue.due_date` (the wrong field) so it was always skipped
+- Fixed `--json` output field `dueDate` always returning `null` — the normalizer at `resolvers.ts` was reading the wrong source field
+
+### Testing
+- Added `tests/smoke/due-date-roundtrip.test.ts` — live regression test gated on `PLANE_CLI_LIVE_TESTS=1` + `PLANE_TEST_PROJECT`, round-trips `--due` on create, update, and clear (`--due none`), mirroring the `label-roundtrip` pattern from v0.3.1
+- Added `tests/smoke/issue-update-audit.test.ts` — silent-drop audit for other `issue update` flags: `--priority`, `--description`, `--assignee me`, `--state` (opt-in), `--parent` (opt-in). Guards against future field-name mismatches like the v0.3.1 / v0.3.2 bugs
+
 ## 0.3.1
 
 ### Bug fixes

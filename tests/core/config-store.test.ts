@@ -187,6 +187,24 @@ describe("config-store", () => {
       const content = fs.readFileSync(getConfigPath(), "utf-8");
       expect(content).toContain("{\n  \"profiles\": [],\n  \"context\": {}\n}");
     });
+
+    it("should restrict default config directory and file permissions on POSIX", async () => {
+      if (process.platform === "win32") {
+        return;
+      }
+
+      const { saveConfig, getConfigDir, getConfigPath } = await importConfigStore();
+
+      const config: PlaneConfig = {
+        profiles: [],
+        context: {},
+      };
+
+      saveConfig(config);
+
+      expect(fs.statSync(getConfigDir()).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(getConfigPath()).mode & 0o777).toBe(0o600);
+    });
   });
 
   describe("getActiveAccount", () => {

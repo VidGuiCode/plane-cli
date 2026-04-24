@@ -10,6 +10,9 @@ export const DEFAULT_CONFIG: PlaneConfig = {
   context: {},
 };
 
+const CONFIG_DIR_MODE = 0o700;
+const CONFIG_FILE_MODE = 0o600;
+
 export function getConfigDir(): string {
   return path.join(os.homedir(), ".plane-cli");
 }
@@ -34,11 +37,32 @@ export function loadConfig(): PlaneConfig {
 }
 
 export function saveConfig(config: PlaneConfig): void {
-  const dir = getConfigDir();
+  const configPath = getConfigPath();
+  const dir = path.dirname(configPath);
+  const defaultConfigDir = path.resolve(getConfigDir());
+  const shouldRestrictDir = path.resolve(dir) === defaultConfigDir;
+
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: CONFIG_DIR_MODE });
   }
-  fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), "utf-8");
+
+  if (shouldRestrictDir) {
+    restrictPermissions(dir, CONFIG_DIR_MODE);
+  }
+
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), {
+    encoding: "utf-8",
+    mode: CONFIG_FILE_MODE,
+  });
+  restrictPermissions(configPath, CONFIG_FILE_MODE);
+}
+
+function restrictPermissions(targetPath: string, mode: number): void {
+  try {
+    fs.chmodSync(targetPath, mode);
+  } catch {
+    // Some platforms/filesystems do not support POSIX-style permissions.
+  }
 }
 
 export function getActiveAccount(config: PlaneConfig): PlaneAccount | undefined {

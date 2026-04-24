@@ -17,7 +17,6 @@
     "node": ">=20"
   },
   "scripts": {
-    "prepare": "node --version",
     "build": "tsc -p tsconfig.json",
     "clean": "powershell -NoProfile -Command \"if (Test-Path dist) { Remove-Item -Recurse -Force dist }\"",
     "dev": "bun src/cli.ts",
@@ -42,7 +41,6 @@
     "@eslint/js": "^9.23.0",
     "@types/node": "^24.0.0",
     "eslint": "^9.23.0",
-    "eslint-config-prettier": "^10.1.1",
     "prettier": "^3.5.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.28.0",

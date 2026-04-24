@@ -2,7 +2,7 @@
 
 Unofficial CLI for [Plane](https://plane.so) — manage your workspace, projects, and issues from any terminal or IDE.
 
-![Version](https://img.shields.io/badge/version-0.2.6-blue)
+![Version](https://img.shields.io/badge/version-0.3.2-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20mac-lightgrey)
@@ -13,11 +13,17 @@ Works with self-hosted Plane instances and Plane Cloud. Token-based auth — no 
 
 ## Install
 
+Requires Node.js 20+ and npm.
+
 ```bash
-npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.2.6/plane-cli-0.2.6.tgz
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.3.2/plane-cli-0.3.2.tgz
+plane --version
+plane login
 ```
 
-Requires Node.js 20+.
+This installs the `plane` command as a normal npm global CLI. It does not require `sudo`, does not install a system service, and does not modify system configuration.
+
+On Linux and macOS, avoid `sudo npm install -g` for this CLI. If npm global installs fail with permission errors, use a user-level Node.js setup such as [`nvm`](https://github.com/nvm-sh/nvm) or [`fnm`](https://github.com/Schniz/fnm), or configure npm's global prefix to a user-owned directory.
 
 ---
 
@@ -147,12 +153,18 @@ Exit codes: 0 = success, 1 = error, 2 = auth failure, 3 = validation, 4 = rate l
 
 ## Configuration
 
-Credentials are stored in `~/.plane-cli/config.json`. Multiple accounts are supported for working with more than one Plane instance.
+Login state is stored in `~/.plane-cli/config.json`. This file contains your Plane base URL, API style, active workspace/project context, and Plane API token. Treat it as a secret and do not share or commit it.
+
+`plane logout` removes saved account data from the config file. To remove the installed CLI command itself, uninstall it with npm:
+
+```bash
+npm uninstall -g plane-cli
+```
 
 <details>
 <summary><strong>Environment variables (CI / containers)</strong></summary>
 
-When both `PLANE_BASE_URL` and `PLANE_API_TOKEN` are set, no config file is needed.
+When both `PLANE_BASE_URL` and `PLANE_API_TOKEN` are set, no saved login config is needed. This is the recommended mode for CI, containers, and other automation where you do not want a token written to `~/.plane-cli/config.json`.
 
 | Variable | Purpose |
 |---|---|

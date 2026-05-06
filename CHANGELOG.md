@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1
+
+### Bug fixes
+- Fixed cycle issue membership commands to use Plane's `cycle-issues` endpoint for `cycle current`, `cycle issues`, `cycle add`, and `cycle remove`
+- Improved the 404 hint for cycle membership endpoint failures so a resolved cycle is not reported as missing
+
+### Testing
+- Added command tests for cycle issue listing and removal through the `cycle-issues` endpoint
+
 ## 0.4.0
 
 ### Features

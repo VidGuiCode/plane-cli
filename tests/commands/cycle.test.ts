@@ -168,8 +168,76 @@ describe("cycle command", () => {
     expect(dryRun).toMatchObject({
       dryRun: true,
       method: "POST",
-      path: "workspaces/workspace/projects/project-123/cycles/cycle-1/issues/",
+      path: "workspaces/workspace/projects/project-123/cycles/cycle-1/cycle-issues/",
       body: { issues: ["issue-1", "issue-2", "issue-3"] },
+    });
+  });
+
+  it("lists cycle issues from the cycle-issues endpoint", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    const fetchMock = mockFetch((url) => {
+      if (url.includes("/cycle-issues/")) {
+        return {
+          results: [
+            {
+              id: "issue-1",
+              sequence_id: 162,
+              name: "Deploy CMS",
+              state: "state-1",
+              priority: "high",
+              created_at: "2026-05-06T00:00:00Z",
+              updated_at: "2026-05-06T00:00:00Z",
+            },
+          ],
+        };
+      }
+      if (url.includes("/states/")) {
+        return { results: [{ id: "state-1", name: "Todo", color: "#888", group: "unstarted" }] };
+      }
+      if (url.includes("/cycles/")) {
+        return { results: [{ id: "cycle-1", name: "Website Deployment" }] };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createCycleCommand().parseAsync(["issues", "Website Deployment", "--json"], {
+      from: "user",
+    });
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/cycle-issues/"))).toBe(true);
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject([
+      {
+        identifier: "ROADMAP-162",
+        title: "Deploy CMS",
+        state: "Todo",
+      },
+    ]);
+  });
+
+  it("removes an issue from a cycle through the cycle-issues endpoint", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+    mockFetch((url) => {
+      if (url.includes("/issues/")) {
+        return { results: [{ id: "issue-1", sequence_id: 162 }] };
+      }
+      if (url.includes("/cycles/")) {
+        return { results: [{ id: "cycle-1", name: "Website Deployment" }] };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createCycleCommand().parseAsync(["remove", "162", "Website Deployment", "--json"], {
+      from: "user",
+    });
+
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({
+      dryRun: true,
+      method: "DELETE",
+      path: "workspaces/workspace/projects/project-123/cycles/cycle-1/cycle-issues/issue-1/",
     });
   });
 });

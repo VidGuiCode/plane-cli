@@ -30,6 +30,9 @@ function getStatusHint(status: number, path?: string): string | null {
       return "Access denied. You may not have permission for this resource. Check your API token scope.";
     case 404: {
       if (path?.includes("members/")) return "Member not found. Check with: plane members list";
+      if (path?.includes("cycle-issues/")) {
+        return "Cycle issue membership endpoint was not found. The cycle may exist, but this Plane API version may use a different cycle membership endpoint.";
+      }
       if (path?.includes("cycles/")) return "Cycle not found. Check with: plane cycle list";
       if (path?.includes("modules/")) return "Module not found. Check with: plane module list";
       if (path?.includes("labels/")) return "Label not found. Check with: plane label list";

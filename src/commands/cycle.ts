@@ -30,6 +30,10 @@ function splitIssueRefs(issueRefs: string): string[] {
   return refs;
 }
 
+function cycleIssuesPath(ws: string, projectId: string, cycleId: string): string {
+  return `workspaces/${ws}/projects/${projectId}/cycles/${cycleId}/cycle-issues/`;
+}
+
 export function createCycleCommand(): Command {
   const command = new Command("cycle")
     .description("Work with Plane cycles (sprints)")
@@ -129,7 +133,7 @@ export function createCycleCommand(): Command {
         const [issues, stateMap] = await Promise.all([
           fetchAll<PlaneIssue>(
             client,
-            `workspaces/${ws}/projects/${projectId}/cycles/${current.id}/issues/`,
+            cycleIssuesPath(ws, projectId, current.id),
           ),
           client
             .get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`)
@@ -199,10 +203,7 @@ export function createCycleCommand(): Command {
           const cycle = await resolveCycle(client, ws, projectId, cycleRef);
 
           const [issues, stateMap] = await Promise.all([
-            fetchAll<PlaneIssue>(
-              client,
-              `workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/issues/`,
-            ),
+            fetchAll<PlaneIssue>(client, cycleIssuesPath(ws, projectId, cycle.id)),
             client
               .get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`)
               .then((r) => buildStateMap(unwrap<PlaneState>(r))),
@@ -281,7 +282,7 @@ export function createCycleCommand(): Command {
           const issueIds = resolvedIssues.map((issue) => issue.issueId);
           const cycle = await resolveCycle(client, ws, projectId, cycleRef);
 
-          const path = `workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/issues/`;
+          const path = cycleIssuesPath(ws, projectId, cycle.id);
           const body = { issues: issueIds };
           if (isDryRunEnabled()) {
             printJson({
@@ -354,7 +355,7 @@ export function createCycleCommand(): Command {
           );
           const cycle = await resolveCycle(client, ws, projectId, cycleRef);
 
-          const path = `workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/issues/${issueId}/`;
+          const path = `${cycleIssuesPath(ws, projectId, cycle.id)}${issueId}/`;
           if (isDryRunEnabled()) {
             printJson({
               dryRun: true,

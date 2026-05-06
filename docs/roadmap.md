@@ -80,24 +80,38 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-## v0.4.0 *(ready)*
+## v0.4.0 *(shipped)*
 
 ### Features
 
-- ~~**Idempotent module/cycle creation**~~ - ready: `plane module ensure <name>` and `plane cycle ensure <name>` return existing resources by case-insensitive name or create them when missing.
-- ~~**Bulk module/cycle assignment**~~ - ready: `plane module add <issues> <module>` and `plane cycle add <issues> <cycle>` accept comma-separated issue refs.
-- ~~**Page lookup improvements**~~ - ready: `plane page search <query>` and `plane page get <page>` by UUID, exact name, or one unambiguous partial name.
-- ~~**Discovery metadata for automation workflows**~~ - ready: `discover issue-inputs` advertises ensure commands, bulk assignment, and comma-separated issue refs.
+- ~~**Idempotent module/cycle creation**~~ - shipped: `plane module ensure <name>` and `plane cycle ensure <name>` return existing resources by case-insensitive name or create them when missing.
+- ~~**Bulk module/cycle assignment**~~ - shipped: `plane module add <issues> <module>` and `plane cycle add <issues> <cycle>` accept comma-separated issue refs.
+- ~~**Page lookup improvements**~~ - shipped: `plane page search <query>` and `plane page get <page>` by UUID, exact name, or one unambiguous partial name.
+- ~~**Discovery metadata for automation workflows**~~ - shipped: `discover issue-inputs` advertises ensure commands, bulk assignment, and comma-separated issue refs.
 
 ### Bug Fixes
 
-- ~~**`cycle create` missing `project_id`**~~ - ready: create payload now includes the resolved project ID.
-- ~~**Project pages 404 compatibility**~~ - ready: page listing now reports unsupported/API-version behavior clearly instead of a generic 404.
+- ~~**`cycle create` missing `project_id`**~~ - shipped: create payload now includes the resolved project ID.
+- ~~**Project pages 404 compatibility**~~ - shipped: page listing now reports unsupported/API-version behavior clearly instead of a generic 404.
 
 ### Reliability
 
-- ~~**Round-trip assertion on `issue update`**~~ - ready: after PATCH, the CLI compares returned fields against requested fields and exits non-zero if Plane appears to have silently ignored any requested update.
+- ~~**Round-trip assertion on `issue update`**~~ - shipped: after PATCH, the CLI compares returned fields against requested fields and exits non-zero if Plane appears to have silently ignored any requested update.
 
 ---
 
-Items beyond v0.4.0 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).
+## v0.4.1 *(ready)*
+
+### Bug Fixes
+
+- ~~**Cycle membership endpoint compatibility**~~ - ready: `cycle current`, `cycle issues`, `cycle add`, and `cycle remove` use Plane's `cycle-issues` membership endpoint. See [cycle-membership-endpoint-failures.md](../context/research/lessons-learned/cycle-membership-endpoint-failures.md).
+
+### Candidate Features
+
+- **`plane label ensure`** - idempotent label creation for agent workflows.
+- **`plane issue import`** - JSON/YAML bulk issue import with preflight validation.
+- **Bulk assignment alternatives** - consider supporting `--issues` / `--cycle` flags or repeated positional refs in addition to comma-separated issue refs.
+
+---
+
+Items beyond v0.4.1 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).

@@ -8,6 +8,7 @@ Thumbs.db
 .idea/
 .vscode/
 .claude/
+AGENTS.md
 context/
 .obsidian/
 skills/

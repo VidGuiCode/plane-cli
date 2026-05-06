@@ -19,6 +19,17 @@ import {
 } from "../core/resolvers.js";
 import type { PlaneModule, PlaneIssue, PlaneState } from "../core/types.js";
 
+function splitIssueRefs(issueRefs: string): string[] {
+  const refs = issueRefs
+    .split(",")
+    .map((ref) => ref.trim())
+    .filter(Boolean);
+  if (refs.length === 0) {
+    throw new Error("At least one issue ref is required.");
+  }
+  return refs;
+}
+
 export function createModuleCommand(): Command {
   const command = new Command("module")
     .description("Work with Plane modules")
@@ -129,8 +140,68 @@ export function createModuleCommand(): Command {
   // ── add ───────────────────────────────────────────────────────────────────
 
   command
-    .command("add <issue> <module>")
-    .description("Add an issue to a module. Issue: 42, PROJ-42, or UUID. Module: name or UUID")
+    .command("ensure <name>")
+    .description("Return an existing module by name, or create it if missing")
+    .option("--workspace <slug>", "Workspace slug (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
+    .option("--json", "Output raw JSON")
+    .action(
+      async (name: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+
+          let projectId: string;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            projectId = proj.id;
+          } else {
+            projectId = requireActiveProject(config).id;
+          }
+
+          const path = `workspaces/${ws}/projects/${projectId}/modules/`;
+          const modules = await fetchAll<PlaneModule>(client, path);
+          const existing = modules.find((mod) => mod.name.toLowerCase() === name.toLowerCase());
+          if (existing) {
+            if (opts.json) {
+              printJson({ status: "existing", module: existing });
+              return;
+            }
+            printInfo(`Module "${existing.name}" already exists.`);
+            return;
+          }
+
+          const body = { name };
+          if (isDryRunEnabled()) {
+            printJson({
+              dryRun: true,
+              method: "POST",
+              path,
+              body,
+              context: { workspace: ws, projectId },
+            });
+            return;
+          }
+
+          const created = await client.post<PlaneModule>(path, body);
+          if (opts.json) {
+            printJson({ status: "created", module: created });
+            return;
+          }
+          printInfo(`Module "${created.name}" created.`);
+        } catch (err) {
+          exitWithError(err, Boolean(opts.json));
+        }
+      },
+    );
+
+  command
+    .command("add <issues> <module>")
+    .description("Add one or more issues to a module. Issues: 42, PROJ-42, UUID, or comma-separated")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
       "--project <identifier-or-name>",
@@ -160,25 +231,30 @@ export function createModuleCommand(): Command {
             activeProjectIdentifier = config.context.activeProjectIdentifier;
           }
 
-          const { issueId, projectId } = await resolveIssueRef(
-            client,
-            ws,
-            activeProjectId,
-            activeProjectIdentifier,
-            style,
-            issueRef,
-          );
+          const resolvedIssues = [];
+          for (const ref of splitIssueRefs(issueRef)) {
+            resolvedIssues.push(
+              await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, ref),
+            );
+          }
+
+          const projectId = resolvedIssues[0].projectId;
+          const mismatched = resolvedIssues.find((issue) => issue.projectId !== projectId);
+          if (mismatched) {
+            throw new Error("All issue refs must belong to the same project for module assignment.");
+          }
+          const issueIds = resolvedIssues.map((issue) => issue.issueId);
           const mod = await resolveModule(client, ws, projectId, moduleRef);
 
           const path = `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`;
-          const body = { issues: [issueId] };
+          const body = { issues: issueIds };
           if (isDryRunEnabled()) {
             printJson({
               dryRun: true,
               method: "POST",
               path,
               body,
-              context: { workspace: ws, projectId, issueId, moduleId: mod.id },
+              context: { workspace: ws, projectId, issueIds, moduleId: mod.id },
             });
             return;
           }
@@ -188,7 +264,11 @@ export function createModuleCommand(): Command {
             printJson(result);
             return;
           }
-          printInfo(`Issue added to module "${mod.name}".`);
+          printInfo(
+            issueIds.length === 1
+              ? `Issue added to module "${mod.name}".`
+              : `${issueIds.length} issues added to module "${mod.name}".`,
+          );
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
         }

@@ -5,6 +5,16 @@ import { printInfo, printTable, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { resolveProject, resolveIssueRef, resolveCycle, buildStateMap, resolveState, normalizeIssue, } from "../core/resolvers.js";
+function splitIssueRefs(issueRefs) {
+    const refs = issueRefs
+        .split(",")
+        .map((ref) => ref.trim())
+        .filter(Boolean);
+    if (refs.length === 0) {
+        throw new Error("At least one issue ref is required.");
+    }
+    return refs;
+}
 export function createCycleCommand() {
     const command = new Command("cycle")
         .description("Work with Plane cycles (sprints)")
@@ -168,8 +178,8 @@ export function createCycleCommand() {
     });
     // ── add ───────────────────────────────────────────────────────────────────
     command
-        .command("add <issue> <cycle>")
-        .description("Add an issue to a cycle. Issue: 42, PROJ-42, or UUID. Cycle: name or UUID")
+        .command("add <issues> <cycle>")
+        .description("Add one or more issues to a cycle. Issues: 42, PROJ-42, UUID, or comma-separated")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
@@ -190,17 +200,26 @@ export function createCycleCommand() {
                 activeProjectId = config.context.activeProject;
                 activeProjectIdentifier = config.context.activeProjectIdentifier;
             }
-            const { issueId, projectId } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
+            const resolvedIssues = [];
+            for (const ref of splitIssueRefs(issueRef)) {
+                resolvedIssues.push(await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, ref));
+            }
+            const projectId = resolvedIssues[0].projectId;
+            const mismatched = resolvedIssues.find((issue) => issue.projectId !== projectId);
+            if (mismatched) {
+                throw new Error("All issue refs must belong to the same project for cycle assignment.");
+            }
+            const issueIds = resolvedIssues.map((issue) => issue.issueId);
             const cycle = await resolveCycle(client, ws, projectId, cycleRef);
             const path = `workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/issues/`;
-            const body = { issues: [issueId] };
+            const body = { issues: issueIds };
             if (isDryRunEnabled()) {
                 printJson({
                     dryRun: true,
                     method: "POST",
                     path,
                     body,
-                    context: { workspace: ws, projectId, issueId, cycleId: cycle.id },
+                    context: { workspace: ws, projectId, issueIds, cycleId: cycle.id },
                 });
                 return;
             }
@@ -209,7 +228,9 @@ export function createCycleCommand() {
                 printJson(result);
                 return;
             }
-            printInfo(`Issue added to cycle "${cycle.name}".`);
+            printInfo(issueIds.length === 1
+                ? `Issue added to cycle "${cycle.name}".`
+                : `${issueIds.length} issues added to cycle "${cycle.name}".`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
@@ -290,7 +311,7 @@ export function createCycleCommand() {
             else {
                 projectId = requireActiveProject(config).id;
             }
-            const body = { name };
+            const body = { name, project_id: projectId };
             if (opts.start)
                 body.start_date = opts.start;
             if (opts.end)
@@ -319,6 +340,64 @@ export function createCycleCommand() {
         }
     });
     // ── delete ─────────────────────────────────────────────────────────────────
+    command
+        .command("ensure <name>")
+        .description("Return an existing cycle by name, or create it if missing")
+        .option("--start <date>", "Start date (YYYY-MM-DD)")
+        .option("--end <date>", "End date (YYYY-MM-DD)")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
+        .action(async (name, opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            let projectId;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+            }
+            else {
+                projectId = requireActiveProject(config).id;
+            }
+            const path = `workspaces/${ws}/projects/${projectId}/cycles/`;
+            const cycles = await fetchAll(client, path);
+            const existing = cycles.find((cycle) => cycle.name.toLowerCase() === name.toLowerCase());
+            if (existing) {
+                if (opts.json) {
+                    printJson({ status: "existing", cycle: existing });
+                    return;
+                }
+                printInfo(`Cycle "${existing.name}" already exists.`);
+                return;
+            }
+            const body = { name, project_id: projectId };
+            if (opts.start)
+                body.start_date = opts.start;
+            if (opts.end)
+                body.end_date = opts.end;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "POST",
+                    path,
+                    body,
+                    context: { workspace: ws, projectId },
+                });
+                return;
+            }
+            const created = await client.post(path, body);
+            if (opts.json) {
+                printJson({ status: "created", cycle: created });
+                return;
+            }
+            printInfo(`Cycle "${created.name}" created successfully.`);
+        }
+        catch (err) {
+            exitWithError(err, Boolean(opts.json));
+        }
+    });
     command
         .command("delete <cycle>")
         .description("Delete a cycle (name or UUID)")

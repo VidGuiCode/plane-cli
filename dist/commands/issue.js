@@ -8,6 +8,91 @@ import { exitWithError, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
 import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, resolveCurrentUserId, normalizeIssue, projectIssueFields, UUID_RE, } from "../core/resolvers.js";
+function stateIdFromIssue(issue) {
+    if (typeof issue.state === "string")
+        return issue.state;
+    if (issue.state && typeof issue.state === "object" && "id" in issue.state) {
+        return String(issue.state.id);
+    }
+    if (issue.state_detail &&
+        typeof issue.state_detail === "object" &&
+        "id" in issue.state_detail) {
+        return String(issue.state_detail.id);
+    }
+    return null;
+}
+function labelIdsFromIssue(issue) {
+    if (Array.isArray(issue.label_ids))
+        return issue.label_ids.map(String);
+    return (issue.labels ?? [])
+        .map((label) => {
+        if (typeof label === "string")
+            return label;
+        if (label && typeof label === "object" && "id" in label)
+            return String(label.id);
+        return null;
+    })
+        .filter((label) => Boolean(label));
+}
+function descriptionMatches(issue, expectedHtml) {
+    const expectedText = stripHtml(expectedHtml);
+    const candidates = [
+        issue.description_html,
+        issue.description_stripped,
+        issue.description,
+    ].filter((value) => Boolean(value));
+    return candidates.some((candidate) => candidate.includes(expectedText));
+}
+function arrayContainsAll(actual, expected) {
+    if (!Array.isArray(actual) || !Array.isArray(expected))
+        return false;
+    const actualSet = new Set(actual.map(String));
+    return expected.map(String).every((value) => actualSet.has(value));
+}
+export function assertIssueUpdateRoundTrip(issue, body) {
+    const mismatches = [];
+    for (const [field, expected] of Object.entries(body)) {
+        if (field === "name" && issue.name !== expected) {
+            mismatches.push({ field, expected, actual: issue.name });
+        }
+        else if (field === "description_html" &&
+            typeof expected === "string" &&
+            !descriptionMatches(issue, expected)) {
+            mismatches.push({
+                field,
+                expected: stripHtml(expected),
+                actual: issue.description_stripped ?? issue.description_html ?? null,
+            });
+        }
+        else if (field === "priority" && issue.priority !== expected) {
+            mismatches.push({ field, expected, actual: issue.priority });
+        }
+        else if (field === "state" && stateIdFromIssue(issue) !== expected) {
+            mismatches.push({ field, expected, actual: stateIdFromIssue(issue) });
+        }
+        else if (field === "assignees" && !arrayContainsAll(issue.assignees, expected)) {
+            mismatches.push({ field, expected, actual: issue.assignees ?? [] });
+        }
+        else if (field === "labels" && !arrayContainsAll(labelIdsFromIssue(issue), expected)) {
+            mismatches.push({ field, expected, actual: labelIdsFromIssue(issue) });
+        }
+        else if (field === "parent" && issue.parent !== expected) {
+            mismatches.push({ field, expected, actual: issue.parent ?? null });
+        }
+        else if (field === "target_date" && issue.target_date !== expected) {
+            mismatches.push({ field, expected, actual: issue.target_date ?? null });
+        }
+        else if (field === "start_date" && issue.start_date !== expected) {
+            mismatches.push({ field, expected, actual: issue.start_date ?? null });
+        }
+    }
+    if (mismatches.length > 0) {
+        const summary = mismatches
+            .map((mismatch) => `${mismatch.field}: expected ${JSON.stringify(mismatch.expected)}, got ${JSON.stringify(mismatch.actual)}`)
+            .join("; ");
+        throw new ValidationError(`Plane API did not confirm requested issue update fields (${summary}). The update may have been silently ignored by this API version.`);
+    }
+}
 export function createIssueCommand() {
     const command = new Command("issue")
         .description("Work with Plane issues")
@@ -406,7 +491,12 @@ export function createIssueCommand() {
                     body.state = stateIdByProject.get(projectId);
                 if (labelIdsByProject.has(projectId))
                     body.labels = labelIdsByProject.get(projectId);
-                return client.patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, body);
+                return client
+                    .patch(`workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`, body)
+                    .then((issue) => {
+                    assertIssueUpdateRoundTrip(issue, body);
+                    return issue;
+                });
             }));
             if (opts.json) {
                 printJson(isBulk ? updated : updated[0]);

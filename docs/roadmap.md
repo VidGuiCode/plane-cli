@@ -1,44 +1,44 @@
 # Roadmap
 
-Planned improvements and features for upcoming releases. This is a living document - items may shift between releases or be dropped based on usage and feedback.
+Planned improvements and features for upcoming releases. This is a living document: items may shift between releases or be dropped based on usage and feedback.
 
 ---
 
-## v0.2.5
+## v0.2.5 *(shipped)*
 
 ### Features
 
-- **`--assignee me`** - resolve the special token `me` to the current authenticated user so `plane issue list --assignee me` works without knowing your own email
-- **`plane issue mine`** - shortcut for listing issues assigned to the current user
-- **`plane cycle current`** - show the active/in-progress cycle and its issues
-- **`plane issue list --updated-since <date>`** - filter issues by last-updated date, useful for "what changed today" in CI and AI workflows
+- ~~**`--assignee me`**~~ - shipped: resolve the special token `me` to the current authenticated user so `plane issue list --assignee me` works without knowing your own email.
+- ~~**`plane issue mine`**~~ - shipped: shortcut for listing issues assigned to the current user.
+- ~~**`plane cycle current`**~~ - shipped: show the active/in-progress cycle and its issues.
+- ~~**`plane issue list --updated-since <date>`**~~ - shipped: filter issues by last-updated date, useful for "what changed today" in CI and AI workflows.
 
 ### Reliability
 
-- **Post-pack release verification** - install the `.tgz` into a temp directory and run smoke tests against the installed binary before publishing, to catch version mismatches or broken dist files before they reach users
+- ~~**Post-pack release verification**~~ - shipped: install the `.tgz` into a temp directory and run smoke tests against the installed binary before publishing.
 
-### Output consistency
+### Output Consistency
 
-- **Normalize `--json` passthrough output** on `issue list`, `cycle issues`, and `module issues` to return camelCase resolved fields (state name, identifier string) instead of raw API shapes, closing the gap between `--json` and `--json --fields`
+- ~~**Normalize `--json` passthrough output**~~ - shipped on `issue list`, `cycle issues`, and `module issues` to return camelCase resolved fields instead of raw API shapes.
 
-### Error messages
+### Error Messages
 
-- **Better diagnostics on auth failures and 404s** - surface which part of the resolution failed (workspace / project / issue number) so failures are actionable rather than cryptic
+- ~~**Better diagnostics on auth failures and 404s**~~ - shipped: surface which part of resolution failed so failures are actionable.
 
 ---
 
 ## v0.2.6 *(shipped)*
 
-### Bug fixes
+### Bug Fixes
 
-- ~~**`--no-interactive` errors on optional fields**~~ — fixed: optional fields default to empty in non-interactive mode (#8)
+- ~~**`--no-interactive` errors on optional fields**~~ - shipped: optional fields default to empty in non-interactive mode (#8).
 
 ### Polish
 
-- ~~**`--name` alias for `--title` on `issue update`**~~ — shipped (#9)
-- ~~**`view` alias for `get`**~~ — shipped on `issue get` and `page get` (#10)
-- ~~**Preserve description formatting in compact/text output**~~ — shipped: `stripHtml` preserves paragraphs, line breaks, and list structure (#11)
-- ~~**Richer cycle/module detail output**~~ — shipped: progress counters, richer tables and discovery output (#12)
+- ~~**`--name` alias for `--title` on `issue update`**~~ - shipped (#9).
+- ~~**`view` alias for `get`**~~ - shipped on `issue get` and `page get` (#10).
+- ~~**Preserve description formatting in compact/text output**~~ - shipped: `stripHtml` preserves paragraphs, line breaks, and list structure (#11).
+- ~~**Richer cycle/module detail output**~~ - shipped: progress counters, richer tables, and discovery output (#12).
 
 ---
 
@@ -46,42 +46,58 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ### Features
 
-- ~~**`plane project create`**~~ — shipped: `plane project create <name> --identifier <ID> --description "..." --network 0|2`
-- ~~**`plane project update`**~~ — shipped: update active project name, description, and network visibility
-- ~~**`plane issue move`**~~ — shipped: `plane issue move <issue> --to-project <identifier>`; uses copy+delete (state mapped by group); `--copy` skips the delete
-- ~~**Bulk operations**~~ — shipped: `plane issue update PROJ-1,2,3 --state Done` resolves all refs first, then patches in parallel
-- ~~**Multi-filter**~~ — shipped: `--state`, `--priority`, and `--assignee` on `issue list` and `issue mine` accept comma-separated values; filtering is applied in-memory
+- ~~**`plane project create`**~~ - shipped: `plane project create <name> --identifier <ID> --description "..." --network 0|2`.
+- ~~**`plane project update`**~~ - shipped: update active project name, description, and network visibility.
+- ~~**`plane issue move`**~~ - shipped: `plane issue move <issue> --to-project <identifier>` with copy/delete semantics; `--copy` skips delete.
+- ~~**Bulk operations**~~ - shipped: `plane issue update PROJ-1,2,3 --state Done` resolves refs first, then patches in parallel.
+- ~~**Multi-filter**~~ - shipped: `--state`, `--priority`, and `--assignee` accept comma-separated values on `issue list` and `issue mine`.
 
 ---
 
 ## v0.3.1 *(shipped)*
 
-### Bug fixes
+### Bug Fixes
 
-- ~~**`--label` flag silently dropped on `issue create` / `issue update`**~~ — shipped: request body now sends `labels` (not `label_ids`); the wrong key was being silently ignored by the Plane v1 issues API. Same fix applied to `label add` / `label remove` (#19). See [context/research/lessons-learned/bug-label-flag-silently-dropped.md](../context/research/lessons-learned/bug-label-flag-silently-dropped.md).
+- ~~**`--label` flag silently dropped on `issue create` / `issue update`**~~ - shipped: request bodies now send `labels` rather than `label_ids`. Same fix applied to `label add` and `label remove` (#19). See [bug-label-flag-silently-dropped.md](../context/research/lessons-learned/bug-label-flag-silently-dropped.md).
 
 ### Polish
 
-- ~~**`--label-id <uuid>`**~~ — shipped: alternative to `--label <name>` on `issue create` / `issue update`, skips name resolution
-- ~~**Document case-insensitive label matching in `--help`**~~ — shipped on `issue create`, `issue update`, `label add`, `label remove`
+- ~~**`--label-id <uuid>`**~~ - shipped: alternative to `--label <name>` on `issue create` and `issue update`.
+- ~~**Document case-insensitive label matching in `--help`**~~ - shipped on `issue create`, `issue update`, `label add`, and `label remove`.
 
 ---
 
 ## v0.3.2 *(shipped)*
 
-### Bug fixes
+### Bug Fixes
 
-- ~~**`--due` flag silent no-op on `issue update`**~~ — shipped: request body now sends `target_date` (not `due_date`); the Plane v1 issues API silently ignored the wrong key. Same class of bug as the v0.3.1 `--label` drop. Fix applied on create, update, and move payloads. Also fixed the read/display path (`issue get` now shows the due date) and the `--json` `dueDate` alias (previously always `null`). See [context/research/lessons-learned/bug-due-flag-silent-noop-on-update.md](../context/research/lessons-learned/bug-due-flag-silent-noop-on-update.md).
+- ~~**`--due` flag silent no-op on `issue update`**~~ - shipped: request bodies now send `target_date` rather than `due_date`. Also fixed `issue get` due-date display and the `--json` `dueDate` alias. See [bug-due-flag-silent-noop-on-update.md](../context/research/lessons-learned/bug-due-flag-silent-noop-on-update.md).
 
-### Test coverage
+### Test Coverage
 
-- ~~**Live round-trip test for `--due`**~~ — shipped: `tests/smoke/due-date-roundtrip.test.ts`, gated on `PLANE_CLI_LIVE_TESTS=1`, covers create / update / clear (`--due none`).
-- ~~**Silent-drop audit harness for remaining `issue update` flags**~~ — shipped: `tests/smoke/issue-update-audit.test.ts` round-trips `--priority`, `--description`, `--assignee me`, `--state` (opt-in via `PLANE_TEST_STATE`), and `--parent` (opt-in via `PLANE_TEST_PARENT`). Same gating pattern.
-
-### Deferred to v0.3.3
-
-- **Round-trip assertion on `issue update`** — after the PATCH, compare the returned issue's requested fields to what was requested; exit non-zero on mismatch, at runtime (not just in tests). Deferred to avoid scope creep in the bug-fix release.
+- ~~**Live round-trip test for `--due`**~~ - shipped: `tests/smoke/due-date-roundtrip.test.ts`.
+- ~~**Silent-drop audit harness for remaining `issue update` flags**~~ - shipped: `tests/smoke/issue-update-audit.test.ts`.
 
 ---
 
-Items beyond v0.3.2 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).
+## v0.4.0 *(ready)*
+
+### Features
+
+- ~~**Idempotent module/cycle creation**~~ - ready: `plane module ensure <name>` and `plane cycle ensure <name>` return existing resources by case-insensitive name or create them when missing.
+- ~~**Bulk module/cycle assignment**~~ - ready: `plane module add <issues> <module>` and `plane cycle add <issues> <cycle>` accept comma-separated issue refs.
+- ~~**Page lookup improvements**~~ - ready: `plane page search <query>` and `plane page get <page>` by UUID, exact name, or one unambiguous partial name.
+- ~~**Discovery metadata for automation workflows**~~ - ready: `discover issue-inputs` advertises ensure commands, bulk assignment, and comma-separated issue refs.
+
+### Bug Fixes
+
+- ~~**`cycle create` missing `project_id`**~~ - ready: create payload now includes the resolved project ID.
+- ~~**Project pages 404 compatibility**~~ - ready: page listing now reports unsupported/API-version behavior clearly instead of a generic 404.
+
+### Reliability
+
+- ~~**Round-trip assertion on `issue update`**~~ - ready: after PATCH, the CLI compares returned fields against requested fields and exits non-zero if Plane appears to have silently ignored any requested update.
+
+---
+
+Items beyond v0.4.0 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).

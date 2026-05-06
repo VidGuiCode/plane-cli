@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+### Features
+- Added `plane module ensure <name>` and `plane cycle ensure <name>` for idempotent automation workflows
+- Added bulk module and cycle assignment with comma-separated issue refs, e.g. `plane module add ROADMAP-157,158,159 "Website Deployment"`
+- Added `plane page search <query>` and name-based `plane page get <page>` lookup
+- Updated `discover issue-inputs` to advertise comma-separated issue refs, ensure commands, and bulk assignment commands
+
+### Reliability
+- Added runtime round-trip assertions for `issue update` so the CLI exits non-zero if Plane silently ignores requested fields
+- Fixed `cycle create` to include `project_id` in the request body
+- Improved page endpoint compatibility errors when a Plane instance/API version returns 404 for project pages
+
+### Testing
+- Added command-level tests for cycle/module ensure, bulk assignment, and issue update round-trip validation
+
 ## 0.3.2
 
 ### Bug fixes

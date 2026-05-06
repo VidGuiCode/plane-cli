@@ -5,7 +5,7 @@ import {
   requireActiveWorkspace,
   requireActiveProject,
 } from "../core/config-store.js";
-import { fetchAll } from "../core/api-client.js";
+import { fetchAll, PlaneApiError, type PlaneApiClient } from "../core/api-client.js";
 import { printInfo, printTable, printJson } from "../core/output.js";
 import { resolveProject } from "../core/resolvers.js";
 import { stripHtml } from "../core/html.js";
@@ -13,6 +13,72 @@ import { ask } from "../core/prompt.js";
 import { exitWithError, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import type { PlanePage } from "../core/types.js";
+
+function pageListPath(workspace: string, projectId: string): string {
+  return `workspaces/${workspace}/projects/${projectId}/pages/`;
+}
+
+function pageUnsupportedError(error: PlaneApiError): ValidationError {
+  return new ValidationError(
+    `Project pages endpoint returned 404. This Plane instance/API version may not support project pages. Original error: ${error.message}`,
+  );
+}
+
+async function fetchProjectPages(
+  client: PlaneApiClient,
+  workspace: string,
+  projectId: string,
+): Promise<PlanePage[]> {
+  try {
+    return await fetchAll<PlanePage>(client, pageListPath(workspace, projectId));
+  } catch (error) {
+    if (error instanceof PlaneApiError && error.status === 404) {
+      throw pageUnsupportedError(error);
+    }
+    throw error;
+  }
+}
+
+function fetchPageById(
+  client: PlaneApiClient,
+  workspace: string,
+  projectId: string,
+  pageId: string,
+): Promise<PlanePage> {
+  return client.get<PlanePage>(`${pageListPath(workspace, projectId)}${pageId}/`);
+}
+
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+async function resolvePage(
+  client: PlaneApiClient,
+  workspace: string,
+  projectId: string,
+  pageRef: string,
+): Promise<PlanePage> {
+  if (isUuidLike(pageRef)) {
+    return fetchPageById(client, workspace, projectId, pageRef);
+  }
+
+  const pages = await fetchProjectPages(client, workspace, projectId);
+  const lower = pageRef.toLowerCase();
+  const exact = pages.find((page) => page.name.toLowerCase() === lower);
+  if (exact) return fetchPageById(client, workspace, projectId, exact.id);
+
+  const matches = pages.filter((page) => page.name.toLowerCase().includes(lower));
+  if (matches.length === 1) return fetchPageById(client, workspace, projectId, matches[0].id);
+  if (matches.length > 1) {
+    throw new ValidationError(
+      `Multiple pages match "${pageRef}". Use: plane page search "${pageRef}" --project <project>`,
+    );
+  }
+
+  throw new ValidationError(`Page "${pageRef}" not found in this project. Check with: plane page list`);
+}
 
 export function createPageCommand(): Command {
   const command = new Command("page")
@@ -44,18 +110,15 @@ export function createPageCommand(): Command {
           projectId = requireActiveProject(config).id;
         }
 
-        const pages = await fetchAll<PlanePage>(
-          client,
-          `workspaces/${ws}/projects/${projectId}/pages/`,
-        );
-
-        if (pages.length === 0) {
-          printInfo("No pages found.");
-          return;
-        }
+        const pages = await fetchProjectPages(client, ws, projectId);
 
         if (opts.json) {
           printJson(pages);
+          return;
+        }
+
+        if (pages.length === 0) {
+          printInfo("No pages found.");
           return;
         }
 
@@ -75,7 +138,7 @@ export function createPageCommand(): Command {
   command
     .command("get <page>")
     .alias("view")
-    .description("Show a page by ID")
+    .description("Show a page by ID or exact name")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
       "--project <identifier-or-name>",
@@ -83,7 +146,7 @@ export function createPageCommand(): Command {
     )
     .option("--json", "Output raw JSON")
     .action(
-      async (pageId: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
+      async (pageRef: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
         try {
           const config = loadConfig();
           const client = createClient(config);
@@ -97,9 +160,7 @@ export function createPageCommand(): Command {
             projectId = requireActiveProject(config).id;
           }
 
-          const page = await client.get<PlanePage>(
-            `workspaces/${ws}/projects/${projectId}/pages/${pageId}/`,
-          );
+          const page = await resolvePage(client, ws, projectId, pageRef);
 
           if (opts.json) {
             printJson(page);
@@ -117,6 +178,60 @@ export function createPageCommand(): Command {
             printInfo("");
             printInfo(content);
           }
+        } catch (err) {
+          exitWithError(err, Boolean(opts.json));
+        }
+      },
+    );
+
+  // â”€â”€ search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  command
+    .command("search <query>")
+    .description("Search pages by name")
+    .option("--workspace <slug>", "Workspace slug (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
+    .option("--json", "Output raw JSON")
+    .action(
+      async (query: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+
+          let projectId: string;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            projectId = proj.id;
+          } else {
+            projectId = requireActiveProject(config).id;
+          }
+
+          const lower = query.toLowerCase();
+          const matches = (await fetchProjectPages(client, ws, projectId)).filter((page) =>
+            page.name.toLowerCase().includes(lower),
+          );
+
+          if (opts.json) {
+            printJson(matches);
+            return;
+          }
+
+          if (matches.length === 0) {
+            printInfo(`No pages matched "${query}".`);
+            return;
+          }
+
+          const rows = matches.map((p) => [
+            `  ${p.name}`,
+            p.id,
+            p.created_by_detail?.display_name ?? "",
+            p.updated_at.slice(0, 10),
+          ]);
+          printTable(rows, ["NAME", "ID", "AUTHOR", "UPDATED"]);
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
         }

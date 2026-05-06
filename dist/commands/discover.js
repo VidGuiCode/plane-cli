@@ -139,11 +139,13 @@ export function createDiscoverCommand() {
                 selectors: {
                     project: { accepted: ["identifier", "name"] },
                     issue: {
-                        accepted: ["sequence", "project-sequence", "uuid"],
+                        accepted: ["sequence", "project-sequence", "uuid", "comma-separated-list"],
                         examples: [
                             "42",
                             `${project.projectIdentifier}-42`,
                             "550e8400-e29b-41d4-a716-446655440000",
+                            "157,158,159",
+                            `${project.projectIdentifier}-157,${project.projectIdentifier}-158`,
                         ],
                     },
                     state: { accepted: ["id", "name"] },
@@ -173,6 +175,32 @@ export function createDiscoverCommand() {
                     defaults: {
                         completedStateId: completed?.id ?? null,
                         reopenStateId: reopen?.id ?? null,
+                    },
+                },
+                automation: {
+                    idempotentCreate: {
+                        module: {
+                            command: "plane module ensure <name>",
+                            selector: "module.name",
+                            behavior: "returns existing module by case-insensitive name, or creates it",
+                        },
+                        cycle: {
+                            command: "plane cycle ensure <name>",
+                            selector: "cycle.name",
+                            behavior: "returns existing cycle by case-insensitive name, or creates it",
+                        },
+                    },
+                    bulkAssignment: {
+                        module: {
+                            command: "plane module add <issues> <module>",
+                            issueRefs: "comma-separated sequence, project-sequence, or UUID refs",
+                            module: "module id or name",
+                        },
+                        cycle: {
+                            command: "plane cycle add <issues> <cycle>",
+                            issueRefs: "comma-separated sequence, project-sequence, or UUID refs",
+                            cycle: "cycle id or name",
+                        },
                     },
                 },
                 inputs: {

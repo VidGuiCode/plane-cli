@@ -2,7 +2,7 @@
 
 Unofficial CLI for [Plane](https://plane.so) — manage your workspace, projects, and issues from any terminal or IDE.
 
-![Version](https://img.shields.io/badge/version-0.3.2-blue)
+![Version](https://img.shields.io/badge/version-0.4.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20mac-lightgrey)
@@ -16,7 +16,7 @@ Works with self-hosted Plane instances and Plane Cloud. Token-based auth — no 
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.3.2/plane-cli-0.3.2.tgz
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.4.0/plane-cli-0.4.0.tgz
 plane --version
 plane login
 ```
@@ -47,18 +47,18 @@ Context (account, workspace, project) is sticky — set it once and every comman
 |------|----------|
 | **Auth** | `login`, `logout`, `profile` |
 | **Accounts** | `account list`, `use`, `show`, `remove` |
-| **Context** | `where`, `workspace list/use`, `project list/use/show` |
-| **Issues** | `issue list`, `get`, `create`, `update`, `delete`, `close`, `reopen`, `open` |
-| **Cycles** | `cycle list`, `issues`, `create`, `add`, `remove`, `delete` |
-| **Modules** | `module list`, `issues`, `create`, `add`, `remove`, `delete` |
+| **Context** | `where`, `workspace list/use`, `project list/use/show/create/update` |
+| **Issues** | `issue list`, `mine`, `get`, `create`, `update`, `move`, `delete`, `close`, `reopen`, `open` |
+| **Cycles** | `cycle list`, `current`, `issues`, `create`, `ensure`, `add`, `remove`, `delete` |
+| **Modules** | `module list`, `issues`, `create`, `ensure`, `add`, `remove`, `delete` |
 | **Labels** | `label list`, `create`, `update`, `delete`, `add`, `remove` |
 | **Comments** | `comment list`, `add`, `update`, `delete` |
-| **Pages** | `page list`, `get`, `create`, `update`, `delete` |
+| **Pages** | `page list`, `get`, `search`, `create`, `update`, `delete` |
 | **States** | `state list` |
 | **Discovery** | `discover context`, `projects`, `issue-inputs`, `states`, `members`, `labels`, `cycles`, `modules` |
 | **Utility** | `members list`, `completion`, `upgrade` |
 
-Issue refs are flexible: `42` (active project), `PROJ-42` (any project), or a full UUID.
+Issue refs are flexible: `42` (active project), `PROJ-42` (any project), or a full UUID. Commands that accept multiple issue refs use comma-separated values, for example `ROADMAP-157,158,159`.
 
 Run `plane <command> --help` for full options on any command.
 
@@ -93,7 +93,7 @@ Run `plane <command> --help` for full options on any command.
 | `assignees` | — |
 | `labels` | `label_ids` |
 | `parent` | — |
-| `dueDate` | `due_date` |
+| `dueDate` | `target_date` |
 | `startDate` | `start_date` |
 | `createdAt` | `created_at` |
 | `updatedAt` | `updated_at` |
@@ -124,6 +124,15 @@ plane issue create --title "Fix login bug" --json
 ```
 
 Use `--no-interactive` in automation. Use `--compact` to reduce token usage. When `--json` is used, errors are structured JSON on stderr.
+
+For repeatable setup scripts, use idempotent resource creation and bulk assignment:
+
+```bash
+plane module ensure "Website Deployment" --project ROADMAP --json
+plane cycle ensure "May 2026 Website Deployment Foundation" --project ROADMAP --start 2026-05-06 --end 2026-05-19 --json
+plane module add ROADMAP-157,158,159 "Website Deployment" --json
+plane cycle add ROADMAP-157,158,159 "May 2026 Website Deployment Foundation" --json
+```
 
 <details>
 <summary><strong>Discover schema</strong></summary>

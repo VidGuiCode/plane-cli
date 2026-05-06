@@ -1,6 +1,6 @@
 {
   "name": "plane-cli",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Unofficial CLI for Plane",
   "license": "MIT",
   "private": false,
@@ -26,7 +26,7 @@
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check src/**/*.ts",
-    "verify-pack": "bash scripts/verify-pack.sh"
+    "verify-pack": "node scripts/verify-pack.mjs"
   },
   "keywords": [
     "plane",

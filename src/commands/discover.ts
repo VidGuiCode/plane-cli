@@ -221,6 +221,11 @@ export function createDiscoverCommand(): Command {
                 selector: "cycle.name",
                 behavior: "returns existing cycle by case-insensitive name, or creates it",
               },
+              label: {
+                command: "plane label ensure <name> [color]",
+                selector: "label.name",
+                behavior: "returns existing label by case-insensitive name, or creates it",
+              },
             },
             bulkAssignment: {
               module: {

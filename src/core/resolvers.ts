@@ -67,7 +67,7 @@ export async function resolveIssueRef(
   activeProjectIdentifier: string | undefined,
   style: string,
   ref: string,
-): Promise<{ issueId: string; projectId: string; identifier: string }> {
+): Promise<{ issueId: string; projectId: string; identifier: string; sequenceId?: number }> {
   const parsed = parseIssueRef(ref);
 
   if (parsed.type === "uuid") {
@@ -82,7 +82,7 @@ export async function resolveIssueRef(
   if (parsed.type === "slug") {
     // Resolve project by identifier prefix
     const project = await resolveProject(client, ws, parsed.identifier);
-    const issueId = await findIssueBySeq(
+    const found = await findIssueBySeq(
       client,
       ws,
       project.id,
@@ -90,7 +90,12 @@ export async function resolveIssueRef(
       parsed.seq,
       `${parsed.identifier}-${parsed.seq}`,
     );
-    return { issueId, projectId: project.id, identifier: project.identifier };
+    return {
+      issueId: found.id,
+      projectId: project.id,
+      identifier: project.identifier,
+      sequenceId: found.sequenceId,
+    };
   }
 
   // type === "seq" — need active project
@@ -99,8 +104,13 @@ export async function resolveIssueRef(
       `No active project for short ID "${ref}". Use PROJ-${ref} format or run: plane project use <identifier>`,
     );
   }
-  const issueId = await findIssueBySeq(client, ws, activeProjectId, style, parsed.seq, ref);
-  return { issueId, projectId: activeProjectId, identifier: activeProjectIdentifier ?? "" };
+  const found = await findIssueBySeq(client, ws, activeProjectId, style, parsed.seq, ref);
+  return {
+    issueId: found.id,
+    projectId: activeProjectId,
+    identifier: activeProjectIdentifier ?? "",
+    sequenceId: found.sequenceId,
+  };
 }
 
 async function findIssueBySeq(
@@ -110,7 +120,7 @@ async function findIssueBySeq(
   style: string,
   seq: number,
   originalRef: string,
-): Promise<string> {
+): Promise<{ id: string; sequenceId: number }> {
   // Fetch all issues to find by sequence_id (Plane API doesn't support filtering by sequence)
   const issues = await fetchAll<PlaneIssue>(
     client,
@@ -118,7 +128,7 @@ async function findIssueBySeq(
   );
   const found = issues.find((i) => i.sequence_id === seq);
   if (!found) throw new Error(`Issue ${originalRef} not found.`);
-  return found.id;
+  return { id: found.id, sequenceId: found.sequence_id };
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -251,6 +261,10 @@ export function normalizeIssue(
   const labelNames = (issue.labels ?? []).map((label) =>
     typeof label === "object" && "name" in label ? label.name : String(label),
   );
+  // Flat API shape returns label UUIDs as strings; nested shape returns objects with an `id`.
+  const labelIds = (issue.labels ?? []).map((label) =>
+    typeof label === "object" && "id" in label ? String(label.id) : String(label),
+  );
 
   return {
     ...(issue as unknown as Record<string, unknown>),
@@ -263,7 +277,7 @@ export function normalizeIssue(
     state_name: stateName,
     state_id: typeof issue.state === "string" ? issue.state : null,
     labels: labelNames,
-    label_ids: labelNames,
+    label_ids: labelIds,
     dueDate: issue.target_date ?? null,
     startDate: issue.start_date ?? null,
     createdAt: issue.created_at,

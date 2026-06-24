@@ -131,10 +131,7 @@ export function createCycleCommand(): Command {
         }
 
         const [issues, stateMap] = await Promise.all([
-          fetchAll<PlaneIssue>(
-            client,
-            cycleIssuesPath(ws, projectId, current.id),
-          ),
+          fetchAll<PlaneIssue>(client, cycleIssuesPath(ws, projectId, current.id)),
           client
             .get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`)
             .then((r) => buildStateMap(unwrap<PlaneState>(r))),
@@ -271,7 +268,14 @@ export function createCycleCommand(): Command {
           const resolvedIssues = [];
           for (const ref of splitIssueRefs(issueRef)) {
             resolvedIssues.push(
-              await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, ref),
+              await resolveIssueRef(
+                client,
+                ws,
+                activeProjectId,
+                activeProjectIdentifier,
+                style,
+                ref,
+              ),
             );
           }
           const projectId = resolvedIssues[0].projectId;

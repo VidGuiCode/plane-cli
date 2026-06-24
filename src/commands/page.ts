@@ -49,9 +49,7 @@ function fetchPageById(
 }
 
 function isUuidLike(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value,
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 async function resolvePage(
@@ -77,7 +75,9 @@ async function resolvePage(
     );
   }
 
-  throw new ValidationError(`Page "${pageRef}" not found in this project. Check with: plane page list`);
+  throw new ValidationError(
+    `Page "${pageRef}" not found in this project. Check with: plane page list`,
+  );
 }
 
 export function createPageCommand(): Command {

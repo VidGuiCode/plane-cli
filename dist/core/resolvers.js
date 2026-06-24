@@ -45,15 +45,25 @@ export async function resolveIssueRef(client, ws, activeProjectId, activeProject
     if (parsed.type === "slug") {
         // Resolve project by identifier prefix
         const project = await resolveProject(client, ws, parsed.identifier);
-        const issueId = await findIssueBySeq(client, ws, project.id, style, parsed.seq, `${parsed.identifier}-${parsed.seq}`);
-        return { issueId, projectId: project.id, identifier: project.identifier };
+        const found = await findIssueBySeq(client, ws, project.id, style, parsed.seq, `${parsed.identifier}-${parsed.seq}`);
+        return {
+            issueId: found.id,
+            projectId: project.id,
+            identifier: project.identifier,
+            sequenceId: found.sequenceId,
+        };
     }
     // type === "seq" — need active project
     if (!activeProjectId) {
         throw new Error(`No active project for short ID "${ref}". Use PROJ-${ref} format or run: plane project use <identifier>`);
     }
-    const issueId = await findIssueBySeq(client, ws, activeProjectId, style, parsed.seq, ref);
-    return { issueId, projectId: activeProjectId, identifier: activeProjectIdentifier ?? "" };
+    const found = await findIssueBySeq(client, ws, activeProjectId, style, parsed.seq, ref);
+    return {
+        issueId: found.id,
+        projectId: activeProjectId,
+        identifier: activeProjectIdentifier ?? "",
+        sequenceId: found.sequenceId,
+    };
 }
 async function findIssueBySeq(client, ws, projectId, style, seq, originalRef) {
     // Fetch all issues to find by sequence_id (Plane API doesn't support filtering by sequence)
@@ -61,7 +71,7 @@ async function findIssueBySeq(client, ws, projectId, style, seq, originalRef) {
     const found = issues.find((i) => i.sequence_id === seq);
     if (!found)
         throw new Error(`Issue ${originalRef} not found.`);
-    return found.id;
+    return { id: found.id, sequenceId: found.sequence_id };
 }
 // ── State ─────────────────────────────────────────────────────────────────────
 export function buildStateMap(states) {
@@ -160,6 +170,8 @@ export async function resolveModule(client, ws, projectId, nameOrId) {
 export function normalizeIssue(issue, stateMap, identifier, projectId) {
     const stateName = resolveState(issue, stateMap);
     const labelNames = (issue.labels ?? []).map((label) => typeof label === "object" && "name" in label ? label.name : String(label));
+    // Flat API shape returns label UUIDs as strings; nested shape returns objects with an `id`.
+    const labelIds = (issue.labels ?? []).map((label) => typeof label === "object" && "id" in label ? String(label.id) : String(label));
     return {
         ...issue,
         project_id: projectId,
@@ -171,7 +183,7 @@ export function normalizeIssue(issue, stateMap, identifier, projectId) {
         state_name: stateName,
         state_id: typeof issue.state === "string" ? issue.state : null,
         labels: labelNames,
-        label_ids: labelNames,
+        label_ids: labelIds,
         dueDate: issue.target_date ?? null,
         startDate: issue.start_date ?? null,
         createdAt: issue.created_at,

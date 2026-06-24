@@ -25,6 +25,21 @@ This installs the `plane` command as a normal npm global CLI. It does not requir
 
 On Linux and macOS, avoid `sudo npm install -g` for this CLI. If npm global installs fail with permission errors, use a user-level Node.js setup such as [`nvm`](https://github.com/nvm-sh/nvm) or [`fnm`](https://github.com/Schniz/fnm), or configure npm's global prefix to a user-owned directory.
 
+### Windows / PowerShell
+
+npm installs a `plane.ps1` shim alongside `plane.cmd`. On a default PowerShell setup, running `plane` may fail with:
+
+```text
+plane.ps1 cannot be loaded because running scripts is disabled on this system.
+```
+
+This is PowerShell's execution policy blocking the `.ps1` shim, not a problem with the CLI. Either:
+
+- Call the `.cmd` shim directly: `plane.cmd where`, or
+- Allow local scripts once (recommended): `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then run `plane` normally.
+
+`cmd.exe` and Git Bash are unaffected.
+
 ---
 
 ## Quick start
@@ -51,7 +66,7 @@ Context (account, workspace, project) is sticky — set it once and every comman
 | **Issues** | `issue list`, `mine`, `get`, `create`, `update`, `move`, `delete`, `close`, `reopen`, `open` |
 | **Cycles** | `cycle list`, `current`, `issues`, `create`, `ensure`, `add`, `remove`, `delete` |
 | **Modules** | `module list`, `issues`, `create`, `ensure`, `add`, `remove`, `delete` |
-| **Labels** | `label list`, `create`, `update`, `delete`, `add`, `remove` |
+| **Labels** | `label list`, `create`, `ensure`, `update`, `delete`, `add`, `remove` |
 | **Comments** | `comment list`, `add`, `update`, `delete` |
 | **Pages** | `page list`, `get`, `search`, `create`, `update`, `delete` |
 | **States** | `state list` |

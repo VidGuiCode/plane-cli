@@ -85,6 +85,11 @@ try {
     assertIncludes(pageHelp, sub, `page ${sub}`);
   }
 
+  const labelHelp = run(plane, ["label", "--help"], { cwd: dir, capture: true });
+  for (const sub of ["list", "create", "ensure", "update", "delete", "add", "remove"]) {
+    assertIncludes(labelHelp, sub, `label ${sub}`);
+  }
+
   console.log("");
   console.log("All smoke tests passed.");
 } finally {

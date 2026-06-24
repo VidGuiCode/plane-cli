@@ -1,5 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { parseIssueRef } from "../../src/core/resolvers.js";
+import { parseIssueRef, normalizeIssue } from "../../src/core/resolvers.js";
+import type { PlaneIssue } from "../../src/core/types.js";
+
+function issue(overrides: Partial<PlaneIssue> = {}): PlaneIssue {
+  return {
+    id: "issue-1",
+    sequence_id: 1,
+    name: "Original",
+    priority: "none",
+    assignees: [],
+    labels: [],
+    target_date: null,
+    start_date: null,
+    created_at: "2026-05-06T00:00:00Z",
+    updated_at: "2026-05-06T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("normalizeIssue label fields", () => {
+  it("exposes UUIDs in label_ids and names in labels for the nested shape", () => {
+    const out = normalizeIssue(
+      issue({ labels: [{ id: "label-uuid-1", name: "Backend", color: "#000000" }] }),
+      new Map(),
+      "ROADMAP",
+      "project-123",
+    );
+    expect(out.labels).toEqual(["Backend"]);
+    expect(out.label_ids).toEqual(["label-uuid-1"]);
+  });
+
+  it("passes through UUID strings for the flat shape", () => {
+    const out = normalizeIssue(
+      issue({ labels: ["label-uuid-2"] as unknown as PlaneIssue["labels"] }),
+      new Map(),
+      "ROADMAP",
+      "project-123",
+    );
+    expect(out.label_ids).toEqual(["label-uuid-2"]);
+  });
+});
 
 describe("parseIssueRef", () => {
   describe("UUID format", () => {

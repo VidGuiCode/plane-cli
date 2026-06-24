@@ -100,18 +100,46 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-## v0.4.1 *(ready)*
+## v0.4.1 *(shipped)*
 
 ### Bug Fixes
 
-- ~~**Cycle membership endpoint compatibility**~~ - ready: `cycle current`, `cycle issues`, `cycle add`, and `cycle remove` use Plane's `cycle-issues` membership endpoint. See [cycle-membership-endpoint-failures.md](../context/research/lessons-learned/cycle-membership-endpoint-failures.md).
-
-### Candidate Features
-
-- **`plane label ensure`** - idempotent label creation for agent workflows.
-- **`plane issue import`** - JSON/YAML bulk issue import with preflight validation.
-- **Bulk assignment alternatives** - consider supporting `--issues` / `--cycle` flags or repeated positional refs in addition to comma-separated issue refs.
+- ~~**Cycle membership endpoint compatibility**~~ - shipped: `cycle current`, `cycle issues`, `cycle add`, and `cycle remove` use Plane's `cycle-issues` membership endpoint. See [cycle-membership-endpoint-failures.md](../context/research/lessons-learned/cycle-membership-endpoint-failures.md).
 
 ---
 
-Items beyond v0.4.1 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).
+## v0.4.2 *(in progress)*
+
+Stability + clean-workflow release. Clears confirmed open bugs and the missing idempotent label command, and hardens CI / the release process.
+
+### Bug Fixes
+
+- ~~**Doubled identifier on `close` / `reopen` / `delete`**~~ - done: confirmation strings now print `PROJ-N` once, derived from the resolved sequence id instead of the raw argument. Reported 2026-04-02 in [ai-agent-usage-feedback.md](../context/research/lessons-learned/ai-agent-usage-feedback.md).
+- ~~**`label_ids` returned label names instead of UUIDs**~~ - done: normalized `--json` output now exposes UUIDs in `label_ids` and names in `labels`.
+
+### Features
+
+- ~~**`plane label ensure <name> [color]`**~~ - done: idempotent label creation for agent workflows, mirroring `module ensure` / `cycle ensure`; advertised in `discover issue-inputs`.
+
+### Workflow / Reliability
+
+- ~~**CI runs lint + format:check**~~ - done: style/format drift is now caught on every push and PR, not only at release time.
+- ~~**Smoke test reads the version from `package.json`**~~ - done: removes the hardcoded-version footgun on release.
+- ~~**Automated release on tag push**~~ - done: pushing a `vX.Y.Z` tag builds, tests, verify-packs, creates the GitHub release, and uploads the `.tgz` asset automatically.
+- ~~**Windows / PowerShell install docs**~~ - done: README documents the `plane.cmd` / execution-policy workaround for the blocked `plane.ps1`.
+
+---
+
+## Backlog *(planned, beyond v0.4.2)*
+
+Deferred from field reports (see [plane-cli-roadmap-automation-feedback.md](../context/research/lessons-learned/plane-cli-roadmap-automation-feedback.md)). These are feature-sized and build on the stable, auto-released baseline:
+
+- **`plane issue bulk-create --file <json|yaml>`** - bulk issue import with `--dry-run` / `--validate-only` preflight (reports missing labels/modules/cycles, invalid assignee/state/date) before mutating.
+- **Missing-label automation** - `--create-labels`, `--ignore-missing-labels`, `--validate-only` on issue create.
+- **`--description-file <path>` / stdin (`-`)** - avoid fragile heredoc quoting for long/multi-paragraph descriptions.
+- **Richer machine-readable error envelope** - add `command`, `retryable`, and `suggestedFix` to `--json` error output.
+- **Bulk assignment alternatives** - support `--issues` / `--cycle` flags or repeated positional refs alongside comma-separated issue refs.
+
+---
+
+Items beyond the current release are added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).

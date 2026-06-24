@@ -201,7 +201,9 @@ export function createModuleCommand(): Command {
 
   command
     .command("add <issues> <module>")
-    .description("Add one or more issues to a module. Issues: 42, PROJ-42, UUID, or comma-separated")
+    .description(
+      "Add one or more issues to a module. Issues: 42, PROJ-42, UUID, or comma-separated",
+    )
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
       "--project <identifier-or-name>",
@@ -234,14 +236,23 @@ export function createModuleCommand(): Command {
           const resolvedIssues = [];
           for (const ref of splitIssueRefs(issueRef)) {
             resolvedIssues.push(
-              await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, ref),
+              await resolveIssueRef(
+                client,
+                ws,
+                activeProjectId,
+                activeProjectIdentifier,
+                style,
+                ref,
+              ),
             );
           }
 
           const projectId = resolvedIssues[0].projectId;
           const mismatched = resolvedIssues.find((issue) => issue.projectId !== projectId);
           if (mismatched) {
-            throw new Error("All issue refs must belong to the same project for module assignment.");
+            throw new Error(
+              "All issue refs must belong to the same project for module assignment.",
+            );
           }
           const issueIds = resolvedIssues.map((issue) => issue.issueId);
           const mod = await resolveModule(client, ws, projectId, moduleRef);

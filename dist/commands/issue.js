@@ -14,9 +14,7 @@ function stateIdFromIssue(issue) {
     if (issue.state && typeof issue.state === "object" && "id" in issue.state) {
         return String(issue.state.id);
     }
-    if (issue.state_detail &&
-        typeof issue.state_detail === "object" &&
-        "id" in issue.state_detail) {
+    if (issue.state_detail && typeof issue.state_detail === "object" && "id" in issue.state_detail) {
         return String(issue.state_detail.id);
     }
     return null;
@@ -542,7 +540,7 @@ export function createIssueCommand() {
                 activeProjectId = config.context.activeProject;
                 activeProjectIdentifier = config.context.activeProjectIdentifier;
             }
-            const { issueId, projectId, identifier } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
+            const { issueId, projectId, identifier, sequenceId } = await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, issueRef);
             const path = `workspaces/${ws}/projects/${projectId}/${style}/${issueId}/`;
             if (isDryRunEnabled()) {
                 printJson({
@@ -563,7 +561,7 @@ export function createIssueCommand() {
                 printJson({ deleted: true, issueId, projectId, identifier });
                 return;
             }
-            printInfo(`Deleted ${identifier ? `${identifier}-` : ""}${issueRef}.`);
+            printInfo(`Deleted ${identifier && sequenceId !== undefined ? `${identifier}-${sequenceId}` : issueRef}.`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
@@ -621,7 +619,7 @@ export function createIssueCommand() {
                 printJson(issue);
                 return;
             }
-            printInfo(`Closed ${identifier ? `${identifier}-` : ""}${issueRef}.`);
+            printInfo(`Closed ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef}.`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
@@ -680,7 +678,7 @@ export function createIssueCommand() {
                 printJson(issue);
                 return;
             }
-            printInfo(`Reopened ${identifier ? `${identifier}-` : ""}${issueRef}.`);
+            printInfo(`Reopened ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef}.`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));

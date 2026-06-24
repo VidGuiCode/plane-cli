@@ -22,6 +22,7 @@ export declare function resolveIssueRef(client: PlaneApiClient, ws: string, acti
     issueId: string;
     projectId: string;
     identifier: string;
+    sequenceId?: number;
 }>;
 export declare function buildStateMap(states: PlaneState[]): Map<string, string>;
 export declare function resolveState(issue: PlaneIssue, stateMap: Map<string, string>): string;

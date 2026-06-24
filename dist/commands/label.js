@@ -88,6 +88,61 @@ export function createLabelCommand() {
             exitWithError(err, Boolean(opts.json));
         }
     });
+    // ── ensure ────────────────────────────────────────────────────────────────
+    command
+        .command("ensure <name> [color]")
+        .description("Return an existing label by name (case-insensitive), or create it if missing. Color: hex code e.g. #ff0000 (optional)")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--json", "Output raw JSON")
+        .action(async (name, color, opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            let projectId;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+            }
+            else {
+                projectId = requireActiveProject(config).id;
+            }
+            const path = `workspaces/${ws}/projects/${projectId}/labels/`;
+            const labels = await fetchAll(client, path);
+            const existing = labels.find((l) => l.name.toLowerCase() === name.toLowerCase());
+            if (existing) {
+                if (opts.json) {
+                    printJson({ status: "existing", label: existing });
+                    return;
+                }
+                printInfo(`Label "${existing.name}" already exists.`);
+                return;
+            }
+            const body = { name };
+            if (color)
+                body.color = color;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "POST",
+                    path,
+                    body,
+                    context: { workspace: ws, projectId },
+                });
+                return;
+            }
+            const created = await client.post(path, body);
+            if (opts.json) {
+                printJson({ status: "created", label: created });
+                return;
+            }
+            printInfo(`Label "${created.name}" created.`);
+        }
+        catch (err) {
+            exitWithError(err, Boolean(opts.json));
+        }
+    });
     // ── delete ────────────────────────────────────────────────────────────────
     command
         .command("delete <label>")

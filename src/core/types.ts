@@ -97,12 +97,15 @@ export interface PlaneMember {
   // Top-level fields — most Plane API versions (member is a string UUID in this layout)
   display_name?: string;
   email?: string;
+  // 5=Owner 10=Admin 15=Member 20=Viewer. Optional because some API versions carry
+  // the real role nested/annotated (see member.role / member__role) and default this.
+  role?: number;
   // Double-underscore annotation format — some older Plane API versions
   member__display_name?: string;
   member__email?: string;
+  member__role?: number;
   // Nested member object — some Plane API versions
-  member?: string | { id: string; display_name: string; email?: string };
-  role: number; // 5=Owner 10=Admin 15=Member 20=Viewer
+  member?: string | { id: string; display_name: string; email?: string; role?: number };
 }
 
 export interface PlaneCycle {

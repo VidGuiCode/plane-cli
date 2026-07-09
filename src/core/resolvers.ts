@@ -191,6 +191,22 @@ export function getMemberEmail(m: PlaneMember): string | undefined {
 }
 
 /**
+ * Extract the membership role — handles all known Plane API member shapes.
+ * Some versions carry the true role nested (`member.role`) or annotated
+ * (`member__role`) while defaulting the top-level `role`, which made every
+ * member render as "Viewer". Returns undefined when no role is present so the
+ * caller can render a neutral placeholder rather than a wrong default.
+ */
+export function getMemberRole(m: PlaneMember): number | undefined {
+  if (m.member && typeof m.member === "object" && typeof m.member.role === "number") {
+    return m.member.role;
+  }
+  if (typeof m.member__role === "number") return m.member__role;
+  if (typeof m.role === "number") return m.role;
+  return undefined;
+}
+
+/**
  * Returns the user UUID for issue assignee filtering.
  * Nested object → member.id; string member field → that string; fallback → top-level id.
  */

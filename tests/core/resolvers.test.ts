@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseIssueRef, normalizeIssue, resolveIssueRef } from "../../src/core/resolvers.js";
+import {
+  parseIssueRef,
+  normalizeIssue,
+  resolveIssueRef,
+  getMemberRole,
+} from "../../src/core/resolvers.js";
 import { PlaneApiClient } from "../../src/core/api-client.js";
 import { ValidationError } from "../../src/core/errors.js";
-import type { PlaneIssue } from "../../src/core/types.js";
+import type { PlaneIssue, PlaneMember } from "../../src/core/types.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -56,6 +61,33 @@ describe("normalizeIssue label fields", () => {
       "project-123",
     );
     expect(out.label_ids).toEqual(["label-uuid-2"]);
+  });
+});
+
+describe("getMemberRole", () => {
+  it("reads the top-level flat role", () => {
+    expect(getMemberRole({ id: "m1", role: 5 } as PlaneMember)).toBe(5);
+  });
+
+  it("reads the double-underscore annotated role", () => {
+    expect(getMemberRole({ id: "m1", member__role: 20 } as PlaneMember)).toBe(20);
+  });
+
+  it("prefers the nested member.role over a defaulted top-level role", () => {
+    const member = {
+      id: "m1",
+      role: 20,
+      member: { id: "u1", display_name: "Owner", role: 5 },
+    } as PlaneMember;
+    expect(getMemberRole(member)).toBe(5);
+  });
+
+  it("returns undefined when no role field is present", () => {
+    expect(getMemberRole({ id: "m1", member: "u1" } as PlaneMember)).toBeUndefined();
+  });
+
+  it("handles role 0 without treating it as missing", () => {
+    expect(getMemberRole({ id: "m1", role: 0 } as PlaneMember)).toBe(0);
   });
 });
 

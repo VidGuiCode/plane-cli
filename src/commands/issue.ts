@@ -8,9 +8,9 @@ import {
   requireActiveAccount,
 } from "../core/config-store.js";
 import { unwrap, fetchAll } from "../core/api-client.js";
-import { printInfo, printTable, printJson } from "../core/output.js";
+import { printInfo, printError, printTable, printJson } from "../core/output.js";
 import { ask } from "../core/prompt.js";
-import { exitWithError, ValidationError } from "../core/errors.js";
+import { exitWithError, getErrorMessage, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
 import {
@@ -20,6 +20,8 @@ import {
   resolveState,
   resolveMember,
   resolveLabel,
+  resolveModule,
+  resolveCycle,
   resolveCurrentUserId,
   normalizeIssue,
   projectIssueFields,
@@ -427,6 +429,8 @@ export function createIssueCommand(): Command {
     .option("--parent <ref>", "Parent issue ref (sequence number, PROJ-42, or UUID)")
     .option("--due <YYYY-MM-DD>", "Due date")
     .option("--start <YYYY-MM-DD>", "Start date")
+    .option("--module <name>", "Add the new issue to this module (name or UUID)")
+    .option("--cycle <name>", "Add the new issue to this cycle (name or UUID)")
     .option("--json", "Output raw JSON")
     .action(
       async (opts: {
@@ -441,6 +445,8 @@ export function createIssueCommand(): Command {
         parent?: string;
         due?: string;
         start?: string;
+        module?: string;
+        cycle?: string;
         json?: boolean;
       }) => {
         try {
@@ -512,28 +518,96 @@ export function createIssueCommand(): Command {
             body.parent = parentId;
           }
 
+          // Resolve module/cycle up-front so a bad name fails before we create a
+          // dangling issue, and so --dry-run can preview the membership POSTs.
+          const mod = opts.module
+            ? await resolveModule(client, ws, projectId, opts.module)
+            : undefined;
+          const cyc = opts.cycle
+            ? await resolveCycle(client, ws, projectId, opts.cycle)
+            : undefined;
+
           const path = `workspaces/${ws}/projects/${projectId}/${style}/`;
+          const moduleIssuesPath = mod
+            ? `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`
+            : undefined;
+          const cycleIssuesPath = cyc
+            ? `workspaces/${ws}/projects/${projectId}/cycles/${cyc.id}/cycle-issues/`
+            : undefined;
+
           if (isDryRunEnabled()) {
-            printJson({
+            const createCall = {
               dryRun: true,
               method: "POST",
               path,
               body,
-              context: {
-                workspace: ws,
-                projectId,
-                projectIdentifier: identifier,
-              },
-            });
+              context: { workspace: ws, projectId, projectIdentifier: identifier },
+            };
+            // Membership runs after create, so the issue id is not known yet.
+            const calls: unknown[] = [createCall];
+            if (moduleIssuesPath) {
+              calls.push({
+                dryRun: true,
+                method: "POST",
+                path: moduleIssuesPath,
+                body: { issues: ["<new-issue-id>"] },
+                context: { workspace: ws, projectId, moduleId: mod!.id },
+              });
+            }
+            if (cycleIssuesPath) {
+              calls.push({
+                dryRun: true,
+                method: "POST",
+                path: cycleIssuesPath,
+                body: { issues: ["<new-issue-id>"] },
+                context: { workspace: ws, projectId, cycleId: cyc!.id },
+              });
+            }
+            printJson(calls.length === 1 ? createCall : calls);
             return;
           }
 
           const issue = await client.post<PlaneIssue>(path, body);
+
+          // Post-create membership. The issue already exists; a failed membership
+          // call must not be swallowed — report partial success with a non-zero
+          // exit and the created id so the user can retry module/cycle add.
+          const membershipErrors: string[] = [];
+          if (moduleIssuesPath) {
+            try {
+              await client.post<unknown>(moduleIssuesPath, { issues: [issue.id] });
+            } catch (err) {
+              membershipErrors.push(`module "${mod!.name}": ${getErrorMessage(err)}`);
+            }
+          }
+          if (cycleIssuesPath) {
+            try {
+              await client.post<unknown>(cycleIssuesPath, { issues: [issue.id] });
+            } catch (err) {
+              membershipErrors.push(`cycle "${cyc!.name}": ${getErrorMessage(err)}`);
+            }
+          }
+
           if (opts.json) {
+            if (membershipErrors.length > 0) {
+              printJson({ issue, membership: { ok: false, errors: membershipErrors } });
+              process.exit(1);
+            }
             printJson(issue);
             return;
           }
+
           printInfo(`Created ${identifier}-${issue.sequence_id}: ${issue.name}`);
+          if (membershipErrors.length > 0) {
+            printError(
+              `Issue ${identifier}-${issue.sequence_id} (uuid: ${issue.id}) created, but membership failed: ${membershipErrors.join(
+                "; ",
+              )}. Retry with: plane module add ${issue.id} <module>`,
+            );
+            process.exit(1);
+          }
+          if (mod) printInfo(`Added to module "${mod.name}".`);
+          if (cyc) printInfo(`Added to cycle "${cyc.name}".`);
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
         }

@@ -66,6 +66,17 @@ function writeConfig(): void {
   process.env.PLANE_CONFIG = configPath;
 }
 
+// Generic handler-driven fetch mock (mirrors module/cycle command tests).
+function mockFetch(handler: (url: string, init?: RequestInit) => unknown): void {
+  globalThis.fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    return new Response(JSON.stringify(handler(url, init)), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+}
+
 // Serves the full issue-list / single-issue / states / projects surface.
 function mockListFetch(issues: Array<Record<string, unknown>>): void {
   globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
@@ -226,5 +237,76 @@ describe("issue list --columns", () => {
     expect(dataRow).toContain("ROADMAP-7");
     expect(dataRow).toContain("2030-01-01");
     expect(dataRow).toContain("user-9");
+  });
+});
+
+describe("issue create --module / --cycle", () => {
+  it("dry-run previews the create POST plus module and cycle membership POSTs", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+    mockFetch((url) => {
+      if (url.includes("/modules/")) return { results: [{ id: "module-1", name: "M1" }] };
+      if (url.includes("/cycles/")) return { results: [{ id: "cycle-1", name: "C1" }] };
+      return {};
+    });
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(
+      [
+        "create",
+        "--title",
+        "New thing",
+        "--description",
+        "",
+        "--module",
+        "M1",
+        "--cycle",
+        "C1",
+        "--json",
+      ],
+      { from: "user" },
+    );
+
+    const calls = JSON.parse(log.mock.calls[0][0] as string) as Array<{
+      method: string;
+      path: string;
+      body: unknown;
+    }>;
+    expect(calls).toHaveLength(3);
+    expect(calls[0]).toMatchObject({
+      method: "POST",
+      path: "workspaces/workspace/projects/project-123/issues/",
+      body: { name: "New thing" },
+    });
+    expect(calls[1]).toMatchObject({
+      method: "POST",
+      path: "workspaces/workspace/projects/project-123/modules/module-1/module-issues/",
+      body: { issues: ["<new-issue-id>"] },
+    });
+    expect(calls[2]).toMatchObject({
+      method: "POST",
+      path: "workspaces/workspace/projects/project-123/cycles/cycle-1/cycle-issues/",
+      body: { issues: ["<new-issue-id>"] },
+    });
+  });
+
+  it("dry-run without --module/--cycle stays a single create object", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+    mockFetch(() => ({}));
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(
+      ["create", "--title", "Solo", "--description", "", "--json"],
+      { from: "user" },
+    );
+
+    const payload = JSON.parse(log.mock.calls[0][0] as string);
+    expect(Array.isArray(payload)).toBe(false);
+    expect(payload).toMatchObject({
+      method: "POST",
+      path: "workspaces/workspace/projects/project-123/issues/",
+      body: { name: "Solo" },
+    });
   });
 });

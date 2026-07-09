@@ -23,9 +23,24 @@ import {
   resolveCurrentUserId,
   normalizeIssue,
   projectIssueFields,
+  findUnknownFields,
   UUID_RE,
 } from "../core/resolvers.js";
 import type { PlaneIssue, PlaneState } from "../core/types.js";
+
+/**
+ * Warn (on stderr, keeping stdout pure JSON) when `--fields` contains names that
+ * aren't keys of the normalized issue — otherwise they're silently dropped and
+ * read as empty values in scripts.
+ */
+function warnUnknownFields(normalized: Record<string, unknown>, fieldsCsv: string): void {
+  const unknown = findUnknownFields(normalized, fieldsCsv);
+  if (unknown.length === 0) return;
+  const valid = Object.keys(normalized).sort().join(", ");
+  console.error(
+    `Warning: ignoring unknown --fields name(s): ${unknown.join(", ")}. Valid fields: ${valid}`,
+  );
+}
 
 type IssueUpdateMismatch = {
   field: string;
@@ -334,6 +349,7 @@ export function createIssueCommand(): Command {
 
           if (opts.json) {
             const normalized = normalizeIssue(issue, stateMap, identifier, projectId);
+            if (opts.fields) warnUnknownFields(normalized, opts.fields);
             printJson(opts.fields ? projectIssueFields(normalized, opts.fields) : normalized);
             return;
           }
@@ -1289,6 +1305,7 @@ async function listIssuesCore(
     const normalized = issues.map((issue) =>
       normalizeIssue(issue, stateMap, identifier, projectId),
     );
+    if (opts.fields) warnUnknownFields(normalized[0], opts.fields);
     printJson(
       opts.fields ? normalized.map((n) => projectIssueFields(n, opts.fields!)) : normalized,
     );

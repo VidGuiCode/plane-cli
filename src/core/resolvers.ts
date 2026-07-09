@@ -319,6 +319,13 @@ export function normalizeIssue(
   };
 }
 
+function parseFieldsCsv(fieldsCsv: string): string[] {
+  return fieldsCsv
+    .split(/[,\s]+/)
+    .map((f) => f.trim())
+    .filter(Boolean);
+}
+
 /**
  * Project a normalized issue down to a specific set of fields.
  */
@@ -326,15 +333,22 @@ export function projectIssueFields(
   normalized: Record<string, unknown>,
   fieldsCsv: string,
 ): Record<string, unknown> {
-  const requested = fieldsCsv
-    .split(/[,\s]+/)
-    .map((f) => f.trim())
-    .filter(Boolean);
-
-  return requested.reduce<Record<string, unknown>>((acc, field) => {
+  return parseFieldsCsv(fieldsCsv).reduce<Record<string, unknown>>((acc, field) => {
     if (field in normalized) acc[field] = normalized[field];
     return acc;
   }, {});
+}
+
+/**
+ * Return the requested `--fields` names that are not keys of the normalized issue.
+ * `projectIssueFields` silently drops these, which reads as an empty value in
+ * scripts; callers use this to warn (on stderr) instead of failing silently.
+ */
+export function findUnknownFields(
+  normalized: Record<string, unknown>,
+  fieldsCsv: string,
+): string[] {
+  return parseFieldsCsv(fieldsCsv).filter((field) => !(field in normalized));
 }
 
 // ── Labels ────────────────────────────────────────────────────────────────────

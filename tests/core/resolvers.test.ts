@@ -4,6 +4,7 @@ import {
   normalizeIssue,
   resolveIssueRef,
   getMemberRole,
+  findUnknownFields,
 } from "../../src/core/resolvers.js";
 import { PlaneApiClient } from "../../src/core/api-client.js";
 import { ValidationError } from "../../src/core/errors.js";
@@ -61,6 +62,22 @@ describe("normalizeIssue label fields", () => {
       "project-123",
     );
     expect(out.label_ids).toEqual(["label-uuid-2"]);
+  });
+});
+
+describe("findUnknownFields", () => {
+  it("reports names that are not keys of the normalized issue", () => {
+    const normalized = normalizeIssue(issue(), new Map(), "ROADMAP", "project-123");
+    // description_stripped is the classic trap: normalizeIssue exposes `description`
+    expect(findUnknownFields(normalized, "title,description_stripped,bogus")).toEqual([
+      "description_stripped",
+      "bogus",
+    ]);
+  });
+
+  it("returns an empty array when every requested name is known", () => {
+    const normalized = normalizeIssue(issue(), new Map(), "ROADMAP", "project-123");
+    expect(findUnknownFields(normalized, "title,state,priority,dueDate")).toEqual([]);
   });
 });
 

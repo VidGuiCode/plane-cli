@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { assertIssueUpdateRoundTrip } from "../../src/commands/issue.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { assertIssueUpdateRoundTrip, createIssueCommand } from "../../src/commands/issue.js";
 import type { PlaneIssue } from "../../src/core/types.js";
 
 function issue(overrides: Partial<PlaneIssue> = {}): PlaneIssue {
@@ -16,6 +19,69 @@ function issue(overrides: Partial<PlaneIssue> = {}): PlaneIssue {
     updated_at: "2026-05-06T00:00:00Z",
     ...overrides,
   };
+}
+
+const originalArgv = [...process.argv];
+const originalConfig = process.env.PLANE_CONFIG;
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  process.argv = originalArgv;
+  if (originalConfig === undefined) {
+    delete process.env.PLANE_CONFIG;
+  } else {
+    process.env.PLANE_CONFIG = originalConfig;
+  }
+  vi.restoreAllMocks();
+  globalThis.fetch = originalFetch;
+});
+
+function writeConfig(): void {
+  const dir = mkdtempSync(path.join(tmpdir(), "plane-cli-issue-"));
+  const configPath = path.join(dir, "config.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      profiles: [
+        {
+          name: "test",
+          baseUrl: "https://plane.example.test",
+          token: "test-token",
+          apiStyle: "issues",
+        },
+      ],
+      context: {
+        activeProfile: "test",
+        activeWorkspace: "workspace",
+        activeProject: "project-123",
+        activeProjectIdentifier: "ROADMAP",
+      },
+    }),
+    "utf-8",
+  );
+  process.env.PLANE_CONFIG = configPath;
+}
+
+// Serves the full issue-list / single-issue / states / projects surface.
+function mockListFetch(issues: Array<Record<string, unknown>>): void {
+  globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    let body: unknown = {};
+    if (url.includes("/states/")) {
+      body = { results: [{ id: "state-1", name: "Todo", group: "unstarted" }] };
+    } else if (/\/issues\/[^/?]+\//.test(url)) {
+      // single-issue GET (…/issues/<id>/)
+      body = issues[0];
+    } else if (url.includes("/issues/")) {
+      body = { results: issues, next_page_results: false };
+    } else if (url.endsWith("/projects/")) {
+      body = { results: [{ id: "project-123", identifier: "ROADMAP", name: "Roadmap" }] };
+    }
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
 }
 
 describe("assertIssueUpdateRoundTrip", () => {
@@ -60,5 +126,45 @@ describe("assertIssueUpdateRoundTrip", () => {
         labels: ["label-1"],
       }),
     ).toThrow(/labels/);
+  });
+});
+
+describe("issue get --fields", () => {
+  it("warns on unknown field names via stderr while keeping stdout pure JSON", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    mockListFetch([{ id: "issue-1", sequence_id: 1, name: "Thing", state: "state-1" }]);
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(
+      ["get", "ROADMAP-1", "--json", "--fields", "title,description_stripped"],
+      { from: "user" },
+    );
+
+    // stdout stays pure JSON — only the known field survives, no warning mixed in
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toEqual({ title: "Thing" });
+
+    // stderr carries the warning naming the unknown field
+    expect(err).toHaveBeenCalled();
+    const warning = err.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(warning).toContain("description_stripped");
+    expect(warning).toMatch(/unknown --fields/i);
+  });
+
+  it("stays silent when all requested fields are known", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    mockListFetch([{ id: "issue-1", sequence_id: 1, name: "Thing", state: "state-1" }]);
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["get", "ROADMAP-1", "--json", "--fields", "title,state"], {
+      from: "user",
+    });
+
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toEqual({ title: "Thing", state: "Todo" });
+    expect(err).not.toHaveBeenCalled();
   });
 });

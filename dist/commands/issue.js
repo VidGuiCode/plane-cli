@@ -2,12 +2,24 @@ import { Command } from "commander";
 import { spawn } from "node:child_process";
 import { loadConfig, createClient, requireActiveWorkspace, requireActiveProject, requireActiveAccount, } from "../core/config-store.js";
 import { unwrap, fetchAll } from "../core/api-client.js";
-import { printInfo, printTable, printJson } from "../core/output.js";
+import { printInfo, printError, printTable, printJson } from "../core/output.js";
 import { ask } from "../core/prompt.js";
-import { exitWithError, ValidationError } from "../core/errors.js";
+import { exitWithError, getErrorMessage, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
-import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, resolveCurrentUserId, normalizeIssue, projectIssueFields, UUID_RE, } from "../core/resolvers.js";
+import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, resolveModule, resolveCycle, resolveCurrentUserId, normalizeIssue, projectIssueFields, findUnknownFields, UUID_RE, } from "../core/resolvers.js";
+/**
+ * Warn (on stderr, keeping stdout pure JSON) when `--fields` contains names that
+ * aren't keys of the normalized issue — otherwise they're silently dropped and
+ * read as empty values in scripts.
+ */
+function warnUnknownFields(normalized, fieldsCsv) {
+    const unknown = findUnknownFields(normalized, fieldsCsv);
+    if (unknown.length === 0)
+        return;
+    const valid = Object.keys(normalized).sort().join(", ");
+    console.error(`Warning: ignoring unknown --fields name(s): ${unknown.join(", ")}. Valid fields: ${valid}`);
+}
 function stateIdFromIssue(issue) {
     if (typeof issue.state === "string")
         return issue.state;
@@ -107,6 +119,7 @@ export function createIssueCommand() {
         .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
         .option("--json", "Output raw JSON")
         .option("--fields <names>", "Comma-separated fields for JSON output")
+        .option("--columns <list>", "Comma-separated columns for the table (id,title,state,priority,due,start,assignee,labels,uuid,created,updated)")
         .action(async (opts) => {
         try {
             const config = loadConfig();
@@ -148,6 +161,7 @@ export function createIssueCommand() {
                 updatedSince: opts.updatedSince,
                 json: opts.json,
                 fields: opts.fields,
+                columns: opts.columns,
             });
         }
         catch (err) {
@@ -165,6 +179,7 @@ export function createIssueCommand() {
         .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
         .option("--json", "Output raw JSON")
         .option("--fields <names>", "Comma-separated fields for JSON output")
+        .option("--columns <list>", "Comma-separated columns for the table (id,title,state,priority,due,start,assignee,labels,uuid,created,updated)")
         .action(async (opts) => {
         try {
             const config = loadConfig();
@@ -196,6 +211,7 @@ export function createIssueCommand() {
                 updatedSince: opts.updatedSince,
                 json: opts.json,
                 fields: opts.fields,
+                columns: opts.columns,
             });
         }
         catch (err) {
@@ -236,6 +252,8 @@ export function createIssueCommand() {
             const stateMap = buildStateMap(unwrap(stateRes));
             if (opts.json) {
                 const normalized = normalizeIssue(issue, stateMap, identifier, projectId);
+                if (opts.fields)
+                    warnUnknownFields(normalized, opts.fields);
                 printJson(opts.fields ? projectIssueFields(normalized, opts.fields) : normalized);
                 return;
             }
@@ -286,6 +304,8 @@ export function createIssueCommand() {
         .option("--parent <ref>", "Parent issue ref (sequence number, PROJ-42, or UUID)")
         .option("--due <YYYY-MM-DD>", "Due date")
         .option("--start <YYYY-MM-DD>", "Start date")
+        .option("--module <name>", "Add the new issue to this module (name or UUID)")
+        .option("--cycle <name>", "Add the new issue to this cycle (name or UUID)")
         .option("--json", "Output raw JSON")
         .action(async (opts) => {
         try {
@@ -338,27 +358,90 @@ export function createIssueCommand() {
                 const { issueId: parentId } = await resolveIssueRef(client, ws, projectId, identifier, style, opts.parent);
                 body.parent = parentId;
             }
+            // Resolve module/cycle up-front so a bad name fails before we create a
+            // dangling issue, and so --dry-run can preview the membership POSTs.
+            const mod = opts.module
+                ? await resolveModule(client, ws, projectId, opts.module)
+                : undefined;
+            const cyc = opts.cycle
+                ? await resolveCycle(client, ws, projectId, opts.cycle)
+                : undefined;
             const path = `workspaces/${ws}/projects/${projectId}/${style}/`;
+            const moduleIssuesPath = mod
+                ? `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`
+                : undefined;
+            const cycleIssuesPath = cyc
+                ? `workspaces/${ws}/projects/${projectId}/cycles/${cyc.id}/cycle-issues/`
+                : undefined;
             if (isDryRunEnabled()) {
-                printJson({
+                const createCall = {
                     dryRun: true,
                     method: "POST",
                     path,
                     body,
-                    context: {
-                        workspace: ws,
-                        projectId,
-                        projectIdentifier: identifier,
-                    },
-                });
+                    context: { workspace: ws, projectId, projectIdentifier: identifier },
+                };
+                // Membership runs after create, so the issue id is not known yet.
+                const calls = [createCall];
+                if (moduleIssuesPath) {
+                    calls.push({
+                        dryRun: true,
+                        method: "POST",
+                        path: moduleIssuesPath,
+                        body: { issues: ["<new-issue-id>"] },
+                        context: { workspace: ws, projectId, moduleId: mod.id },
+                    });
+                }
+                if (cycleIssuesPath) {
+                    calls.push({
+                        dryRun: true,
+                        method: "POST",
+                        path: cycleIssuesPath,
+                        body: { issues: ["<new-issue-id>"] },
+                        context: { workspace: ws, projectId, cycleId: cyc.id },
+                    });
+                }
+                printJson(calls.length === 1 ? createCall : calls);
                 return;
             }
             const issue = await client.post(path, body);
+            // Post-create membership. The issue already exists; a failed membership
+            // call must not be swallowed — report partial success with a non-zero
+            // exit and the created id so the user can retry module/cycle add.
+            const membershipErrors = [];
+            if (moduleIssuesPath) {
+                try {
+                    await client.post(moduleIssuesPath, { issues: [issue.id] });
+                }
+                catch (err) {
+                    membershipErrors.push(`module "${mod.name}": ${getErrorMessage(err)}`);
+                }
+            }
+            if (cycleIssuesPath) {
+                try {
+                    await client.post(cycleIssuesPath, { issues: [issue.id] });
+                }
+                catch (err) {
+                    membershipErrors.push(`cycle "${cyc.name}": ${getErrorMessage(err)}`);
+                }
+            }
             if (opts.json) {
+                if (membershipErrors.length > 0) {
+                    printJson({ issue, membership: { ok: false, errors: membershipErrors } });
+                    process.exit(1);
+                }
                 printJson(issue);
                 return;
             }
             printInfo(`Created ${identifier}-${issue.sequence_id}: ${issue.name}`);
+            if (membershipErrors.length > 0) {
+                printError(`Issue ${identifier}-${issue.sequence_id} (uuid: ${issue.id}) created, but membership failed: ${membershipErrors.join("; ")}. Retry with: plane module add ${issue.id} <module>`);
+                process.exit(1);
+            }
+            if (mod)
+                printInfo(`Added to module "${mod.name}".`);
+            if (cyc)
+                printInfo(`Added to cycle "${cyc.name}".`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
@@ -509,7 +592,7 @@ export function createIssueCommand() {
             }
             else {
                 const issue = updated[0];
-                printInfo(`Updated ${resolved[0].identifier}-${issue.sequence_id}: ${issue.name}`);
+                printInfo(`Updated ${resolved[0].identifier}-${issue.sequence_id}: ${issue.name} (uuid: ${resolved[0].issueId})`);
             }
         }
         catch (err) {
@@ -561,7 +644,7 @@ export function createIssueCommand() {
                 printJson({ deleted: true, issueId, projectId, identifier });
                 return;
             }
-            printInfo(`Deleted ${identifier && sequenceId !== undefined ? `${identifier}-${sequenceId}` : issueRef}.`);
+            printInfo(`Deleted ${identifier && sequenceId !== undefined ? `${identifier}-${sequenceId}` : issueRef} (uuid: ${issueId}).`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
@@ -619,7 +702,7 @@ export function createIssueCommand() {
                 printJson(issue);
                 return;
             }
-            printInfo(`Closed ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef}.`);
+            printInfo(`Closed ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef} (uuid: ${issueId}).`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
@@ -678,7 +761,7 @@ export function createIssueCommand() {
                 printJson(issue);
                 return;
             }
-            printInfo(`Reopened ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef}.`);
+            printInfo(`Reopened ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef} (uuid: ${issueId}).`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
@@ -852,9 +935,54 @@ export function createIssueCommand() {
 function collect(value, previous) {
     return [...previous, value];
 }
+function cell(value) {
+    if (value === null || value === undefined)
+        return "";
+    if (Array.isArray(value))
+        return value.map(String).join(",");
+    return String(value);
+}
+// Curated columns for the human issue table. Values come from the normalized
+// issue so the column set stays consistent with `--fields` / `--json` output.
+const ISSUE_COLUMNS = {
+    id: { header: "ID", get: (n) => cell(n.identifier) },
+    uuid: { header: "UUID", get: (n) => cell(n.id) },
+    title: { header: "TITLE", get: (n) => cell(n.title) },
+    state: { header: "STATE", get: (n) => cell(n.state) },
+    priority: { header: "PRIORITY", get: (n) => cell(n.priority) },
+    due: { header: "DUE", get: (n) => cell(n.dueDate) },
+    start: { header: "START", get: (n) => cell(n.startDate) },
+    assignee: { header: "ASSIGNEE", get: (n) => cell(n.assignees) },
+    labels: { header: "LABELS", get: (n) => cell(n.labels) },
+    created: { header: "CREATED", get: (n) => cell(n.createdAt) },
+    updated: { header: "UPDATED", get: (n) => cell(n.updatedAt) },
+};
+const DEFAULT_ISSUE_COLUMNS = ["id", "title", "state", "priority", "due"];
+/**
+ * Resolve the `--columns` value to a validated list of column keys, defaulting
+ * to id/title/state/priority/due (which adds the DUE tracking column). Throws a
+ * ValidationError naming any unknown columns.
+ */
+export function resolveIssueColumns(columnsCsv) {
+    if (!columnsCsv)
+        return DEFAULT_ISSUE_COLUMNS;
+    const requested = columnsCsv
+        .split(/[,\s]+/)
+        .map((c) => c.trim().toLowerCase())
+        .filter(Boolean);
+    if (requested.length === 0)
+        return DEFAULT_ISSUE_COLUMNS;
+    const unknown = requested.filter((c) => !(c in ISSUE_COLUMNS));
+    if (unknown.length > 0) {
+        throw new ValidationError(`Unknown --columns name(s): ${unknown.join(", ")}. Valid columns: ${Object.keys(ISSUE_COLUMNS).join(", ")}.`);
+    }
+    return requested;
+}
 async function listIssuesCore(client, ws, projectId, identifier, opts) {
     const style = client.issuesSegment();
     const basePath = `workspaces/${ws}/projects/${projectId}/${style}/`;
+    // Validate requested columns up-front so a typo fails before any network calls.
+    const columns = resolveIssueColumns(opts.columns);
     const [allIssues, stateList] = await Promise.all([
         fetchAll(client, basePath),
         client
@@ -898,15 +1026,15 @@ async function listIssuesCore(client, ws, projectId, identifier, opts) {
     }
     if (opts.json) {
         const normalized = issues.map((issue) => normalizeIssue(issue, stateMap, identifier, projectId));
+        if (opts.fields)
+            warnUnknownFields(normalized[0], opts.fields);
         printJson(opts.fields ? normalized.map((n) => projectIssueFields(n, opts.fields)) : normalized);
         return;
     }
-    const rows = issues.map((issue) => [
-        `${identifier}-${issue.sequence_id}`,
-        issue.name,
-        resolveState(issue, stateMap),
-        issue.priority ?? "",
-    ]);
-    printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
+    const rows = issues.map((issue) => {
+        const normalized = normalizeIssue(issue, stateMap, identifier, projectId);
+        return columns.map((col) => ISSUE_COLUMNS[col].get(normalized));
+    });
+    printTable(rows, columns.map((col) => ISSUE_COLUMNS[col].header));
 }
 //# sourceMappingURL=issue.js.map

@@ -33,6 +33,14 @@ export declare function getMemberDisplayName(m: PlaneMember): string;
 /** Extract email — handles all known Plane API member shapes. */
 export declare function getMemberEmail(m: PlaneMember): string | undefined;
 /**
+ * Extract the membership role — handles all known Plane API member shapes.
+ * Some versions carry the true role nested (`member.role`) or annotated
+ * (`member__role`) while defaulting the top-level `role`, which made every
+ * member render as "Viewer". Returns undefined when no role is present so the
+ * caller can render a neutral placeholder rather than a wrong default.
+ */
+export declare function getMemberRole(m: PlaneMember): number | undefined;
+/**
  * Returns the user UUID for issue assignee filtering.
  * Nested object → member.id; string member field → that string; fallback → top-level id.
  */
@@ -55,6 +63,12 @@ export declare function normalizeIssue(issue: PlaneIssue, stateMap: Map<string, 
  * Project a normalized issue down to a specific set of fields.
  */
 export declare function projectIssueFields(normalized: Record<string, unknown>, fieldsCsv: string): Record<string, unknown>;
+/**
+ * Return the requested `--fields` names that are not keys of the normalized issue.
+ * `projectIssueFields` silently drops these, which reads as an empty value in
+ * scripts; callers use this to warn (on stderr) instead of failing silently.
+ */
+export declare function findUnknownFields(normalized: Record<string, unknown>, fieldsCsv: string): string[];
 export declare function resolveLabel(client: PlaneApiClient, ws: string, projectId: string, nameOrColor: string): Promise<string>;
 export {};
 //# sourceMappingURL=resolvers.d.ts.map

@@ -2,9 +2,32 @@ import { Command } from "commander";
 import { loadConfig, createClient, requireActiveWorkspace, requireActiveProject, } from "../core/config-store.js";
 import { unwrap, fetchAll } from "../core/api-client.js";
 import { printInfo, printTable, printJson } from "../core/output.js";
-import { exitWithError } from "../core/errors.js";
+import { exitWithError, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
-import { resolveProject, resolveIssueRef, resolveModule, buildStateMap, resolveState, normalizeIssue, } from "../core/resolvers.js";
+import { resolveProject, resolveIssueRef, resolveModule, resolveMember, buildStateMap, resolveState, normalizeIssue, UUID_RE, } from "../core/resolvers.js";
+/**
+ * Map CLI property options to the Plane module PATCH/POST body. Field names
+ * mirror the module GET response (name/description/status/start_date/target_date)
+ * and Plane's module serializer. NOTE: `lead` (vs `lead_id`) is unverified
+ * offline — confirm with a live --dry-run before relying on lead updates.
+ */
+async function buildModuleBody(client, ws, opts) {
+    const body = {};
+    if (opts.name !== undefined)
+        body.name = opts.name;
+    if (opts.description !== undefined)
+        body.description = opts.description;
+    if (opts.status !== undefined)
+        body.status = opts.status;
+    if (opts.start !== undefined)
+        body.start_date = opts.start === "none" ? null : opts.start;
+    if (opts.target !== undefined)
+        body.target_date = opts.target === "none" ? null : opts.target;
+    if (opts.lead !== undefined) {
+        body.lead = UUID_RE.test(opts.lead) ? opts.lead : await resolveMember(client, ws, opts.lead);
+    }
+    return body;
+}
 function splitIssueRefs(issueRefs) {
     const refs = issueRefs
         .split(",")
@@ -65,6 +88,11 @@ export function createModuleCommand() {
         .description("Create a new module in the active (or specified) project")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--description <text>", "Module description")
+        .option("--status <status>", "Module status")
+        .option("--start <YYYY-MM-DD>", "Start date")
+        .option("--target <YYYY-MM-DD>", "Target (end) date")
+        .option("--lead <name>", "Module lead: display name, email, or member UUID")
         .option("--json", "Output raw JSON")
         .action(async (name, opts) => {
         try {
@@ -80,7 +108,7 @@ export function createModuleCommand() {
                 projectId = requireActiveProject(config).id;
             }
             const path = `workspaces/${ws}/projects/${projectId}/modules/`;
-            const body = { name };
+            const body = { name, ...(await buildModuleBody(client, ws, opts)) };
             if (isDryRunEnabled()) {
                 printJson({
                     dryRun: true,
@@ -102,12 +130,70 @@ export function createModuleCommand() {
             exitWithError(err, Boolean(opts.json));
         }
     });
+    // ── update ──────────────────────────────────────────────────────────────────
+    command
+        .command("update <module>")
+        .description("Update a module's properties (name or UUID)")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--name <name>", "New module name")
+        .option("--description <text>", "Module description")
+        .option("--status <status>", "Module status")
+        .option("--start <YYYY-MM-DD>", "Start date (use 'none' to clear)")
+        .option("--target <YYYY-MM-DD>", "Target (end) date (use 'none' to clear)")
+        .option("--lead <name>", "Module lead: display name, email, or member UUID")
+        .option("--json", "Output raw JSON")
+        .action(async (moduleRef, opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            let projectId;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+            }
+            else {
+                projectId = requireActiveProject(config).id;
+            }
+            const mod = await resolveModule(client, ws, projectId, moduleRef);
+            const body = await buildModuleBody(client, ws, opts);
+            if (Object.keys(body).length === 0) {
+                throw new ValidationError("Nothing to update. Use --name, --description, --status, --start, --target, or --lead.");
+            }
+            const path = `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/`;
+            if (isDryRunEnabled()) {
+                printJson({
+                    dryRun: true,
+                    method: "PATCH",
+                    path,
+                    body,
+                    context: { workspace: ws, projectId, moduleId: mod.id },
+                });
+                return;
+            }
+            const updated = await client.patch(path, body);
+            if (opts.json) {
+                printJson(updated);
+                return;
+            }
+            printInfo(`Module "${updated.name}" updated.`);
+        }
+        catch (err) {
+            exitWithError(err, Boolean(opts.json));
+        }
+    });
     // ── add ───────────────────────────────────────────────────────────────────
     command
         .command("ensure <name>")
         .description("Return an existing module by name, or create it if missing")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--description <text>", "Module description (applied only when creating)")
+        .option("--status <status>", "Module status (applied only when creating)")
+        .option("--start <YYYY-MM-DD>", "Start date (applied only when creating)")
+        .option("--target <YYYY-MM-DD>", "Target (end) date (applied only when creating)")
+        .option("--lead <name>", "Module lead: display name, email, or member UUID (create only)")
         .option("--json", "Output raw JSON")
         .action(async (name, opts) => {
         try {
@@ -133,7 +219,7 @@ export function createModuleCommand() {
                 printInfo(`Module "${existing.name}" already exists.`);
                 return;
             }
-            const body = { name };
+            const body = { name, ...(await buildModuleBody(client, ws, opts)) };
             if (isDryRunEnabled()) {
                 printJson({
                     dryRun: true,
@@ -207,7 +293,7 @@ export function createModuleCommand() {
                 return;
             }
             printInfo(issueIds.length === 1
-                ? `Issue added to module "${mod.name}".`
+                ? `Issue added to module "${mod.name}" (uuid: ${issueIds[0]}).`
                 : `${issueIds.length} issues added to module "${mod.name}".`);
         }
         catch (err) {
@@ -312,7 +398,7 @@ export function createModuleCommand() {
                 });
                 return;
             }
-            printInfo(`Issue removed from module "${mod.name}".`);
+            printInfo(`Issue removed from module "${mod.name}" (uuid: ${issueId}).`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));

@@ -1,4 +1,5 @@
 import { unwrap, fetchAll } from "./api-client.js";
+import { ValidationError } from "./errors.js";
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // ── Project ──────────────────────────────────────────────────────────────────
 export async function resolveProject(client, ws, ref) {
@@ -68,10 +69,23 @@ export async function resolveIssueRef(client, ws, activeProjectId, activeProject
 async function findIssueBySeq(client, ws, projectId, style, seq, originalRef) {
     // Fetch all issues to find by sequence_id (Plane API doesn't support filtering by sequence)
     const issues = await fetchAll(client, `workspaces/${ws}/projects/${projectId}/${style}/`);
-    const found = issues.find((i) => i.sequence_id === seq);
-    if (!found)
+    const matches = issues.filter((i) => i.sequence_id === seq);
+    if (matches.length === 0)
         throw new Error(`Issue ${originalRef} not found.`);
-    return { id: found.id, sequenceId: found.sequence_id };
+    if (matches.length === 1) {
+        return { id: matches[0].id, sequenceId: matches[0].sequence_id };
+    }
+    // Duplicate sequence_id (real in migrated/imported projects). Resolving to the
+    // first match silently mutates the wrong issue and reports success, so refuse to
+    // guess and list every candidate by UUID. Fetch state names only here, on this
+    // slow ambiguous path, to keep the common single-match path free of extra calls.
+    const stateRes = await client.get(`workspaces/${ws}/projects/${projectId}/states/`);
+    const stateMap = buildStateMap(unwrap(stateRes));
+    const candidates = matches
+        .map((i) => `  ${i.id} — ${resolveState(i, stateMap)} — ${i.name}`)
+        .join("\n");
+    throw new ValidationError(`Ambiguous issue ref "${originalRef}": ${matches.length} issues share sequence ${seq}. ` +
+        `Re-run with the exact UUID of the one you mean:\n${candidates}`);
 }
 // ── State ─────────────────────────────────────────────────────────────────────
 export function buildStateMap(states) {
@@ -114,6 +128,23 @@ export function getMemberEmail(m) {
     if (m.member && typeof m.member === "object")
         return m.member.email;
     return m.email;
+}
+/**
+ * Extract the membership role — handles all known Plane API member shapes.
+ * Some versions carry the true role nested (`member.role`) or annotated
+ * (`member__role`) while defaulting the top-level `role`, which made every
+ * member render as "Viewer". Returns undefined when no role is present so the
+ * caller can render a neutral placeholder rather than a wrong default.
+ */
+export function getMemberRole(m) {
+    if (m.member && typeof m.member === "object" && typeof m.member.role === "number") {
+        return m.member.role;
+    }
+    if (typeof m.member__role === "number")
+        return m.member__role;
+    if (typeof m.role === "number")
+        return m.role;
+    return undefined;
 }
 /**
  * Returns the user UUID for issue assignee filtering.
@@ -191,19 +222,29 @@ export function normalizeIssue(issue, stateMap, identifier, projectId) {
         description: issue.description_stripped ?? issue.description_html ?? null,
     };
 }
+function parseFieldsCsv(fieldsCsv) {
+    return fieldsCsv
+        .split(/[,\s]+/)
+        .map((f) => f.trim())
+        .filter(Boolean);
+}
 /**
  * Project a normalized issue down to a specific set of fields.
  */
 export function projectIssueFields(normalized, fieldsCsv) {
-    const requested = fieldsCsv
-        .split(/[,\s]+/)
-        .map((f) => f.trim())
-        .filter(Boolean);
-    return requested.reduce((acc, field) => {
+    return parseFieldsCsv(fieldsCsv).reduce((acc, field) => {
         if (field in normalized)
             acc[field] = normalized[field];
         return acc;
     }, {});
+}
+/**
+ * Return the requested `--fields` names that are not keys of the normalized issue.
+ * `projectIssueFields` silently drops these, which reads as an empty value in
+ * scripts; callers use this to warn (on stderr) instead of failing silently.
+ */
+export function findUnknownFields(normalized, fieldsCsv) {
+    return parseFieldsCsv(fieldsCsv).filter((field) => !(field in normalized));
 }
 // ── Labels ────────────────────────────────────────────────────────────────────
 export async function resolveLabel(client, ws, projectId, nameOrColor) {

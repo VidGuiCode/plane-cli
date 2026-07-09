@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.3
+
+Clears the actionable items from the 2026-07-10 production-use gap report. See [production-use-gap-report.md](context/research/lessons-learned/production-use-gap-report.md).
+
+### Bug fixes
+- **Ambiguous sequence refs no longer resolve to the wrong issue** — `findIssueBySeq` picked the first of any issues sharing a `sequence_id` (real in migrated/imported projects) and mutated it while reporting success. It now aborts on duplicates, listing every candidate by UUID + state + title, and requires an unambiguous UUID. **P1 / data-integrity.**
+- **`members list` no longer shows every member as "Viewer"** — role was read as a raw top-level field while name/email tolerate three API shapes. Added a `getMemberRole` helper (nested `member.role` → annotated `member__role` → top-level `role`) and render `-` when role is genuinely absent.
+- **Unknown `--fields` names no longer fail silently** — `issue get`/`list`/`mine` now emit a stderr warning naming unrecognized fields and listing the valid normalized names; stdout stays pure JSON.
+
+### Features
+- **`plane module update` / `plane cycle update`** — update a module (`--name`, `--description`, `--status`, `--start`→`start_date`, `--target`→`target_date`, `--lead`) or cycle (`--name`, `--description`, `--start`→`start_date`, `--end`→`end_date`) in place. The same property options were added to module/cycle `create` and `ensure`, so structures can be born fully specified. Both `update` commands require at least one option and support `--dry-run`/`--json`.
+- **`--module` / `--cycle` on `issue create`** — join a module/cycle at creation. Membership is resolved up-front and POSTed after create; `--dry-run` previews the create plus each membership call, and a membership failure after the issue exists reports partial success with a non-zero exit and the created UUID.
+
+### Polish
+- **Tracking columns on `issue list` / `issue mine`** — added `--columns <list>` (id, title, state, priority, due, start, assignee, labels, uuid, created, updated); the default table now includes `DUE`. Unknown column names error before any network call.
+
+### Confirmations
+- Single-issue mutations (`issue update`/`close`/`reopen`/`delete`, `module add`/`remove`, `cycle add`/`remove`) now print the resolved issue UUID, so a wrong target is visible even when resolution is unambiguous.
+
+### Testing
+- Added resolver tests for duplicate-sequence resolution, `getMemberRole` across all member shapes, and unknown-field detection; command tests for the `--fields` stderr warning, `--columns`, `issue create --module/--cycle` dry-run, and `module`/`cycle update` dry-run.
+
+## 0.4.2
+
+Stability + clean-workflow release. Clears confirmed open bugs and the missing idempotent label command, and hardens CI and the release process. (Shipped to `main`; see the git history and `docs/roadmap.md`.)
+
+### Bug fixes
+- Fixed the doubled identifier on `issue close` / `reopen` / `delete` — confirmation strings now print `PROJ-N` once, derived from the resolved sequence id instead of the raw argument
+- Fixed normalized `--json` output so `label_ids` exposes label UUIDs and `labels` exposes names
+
+### Features
+- Added `plane label ensure <name> [color]` — idempotent label creation for agent workflows, mirroring `module ensure` / `cycle ensure`; advertised in `discover issue-inputs`
+
+### Workflow / Reliability
+- CI now runs lint + format:check on every push and PR, catching style/format drift before release
+- The smoke test reads the version from `package.json`, removing the hardcoded-version footgun
+- Automated release on tag push: pushing a `vX.Y.Z` tag builds, tests, verify-packs, creates the GitHub release, and uploads the `.tgz`
+- Documented the Windows / PowerShell install workaround (`plane.cmd` / execution policy) in the README
+
 ## 0.4.1
 
 ### Bug fixes

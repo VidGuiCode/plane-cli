@@ -87,14 +87,16 @@ export interface PlaneMember {
     id: string;
     display_name?: string;
     email?: string;
+    role?: number;
     member__display_name?: string;
     member__email?: string;
+    member__role?: number;
     member?: string | {
         id: string;
         display_name: string;
         email?: string;
+        role?: number;
     };
-    role: number;
 }
 export interface PlaneCycle {
     id: string;

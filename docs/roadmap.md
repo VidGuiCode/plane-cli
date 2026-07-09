@@ -108,7 +108,7 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-## v0.4.2 *(in progress)*
+## v0.4.2 *(shipped)*
 
 Stability + clean-workflow release. Clears confirmed open bugs and the missing idempotent label command, and hardens CI / the release process.
 
@@ -130,15 +130,39 @@ Stability + clean-workflow release. Clears confirmed open bugs and the missing i
 
 ---
 
+## v0.4.3 *(shipped)*
+
+From the 2026-07-10 production-use gap report. See [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md).
+
+### Bug Fixes
+
+- ~~**Ambiguous sequence refs resolve to the wrong issue**~~ - shipped: `findIssueBySeq` now aborts on duplicate `sequence_id`s, listing every candidate (UUID + state + title) and requiring a UUID instead of silently mutating the first match. Single-issue mutation confirmations also print the resolved UUID. **P1 / data-integrity.**
+- ~~**Unknown `--fields` names fail silently**~~ - shipped: `issue get`/`list`/`mine` now emit a stderr warning naming unrecognized fields and listing the valid normalized names; stdout stays pure JSON.
+- ~~**`members list` shows every member as "Viewer"**~~ - shipped: added a `getMemberRole` helper (nested → annotated → top-level) and render `-` when role is genuinely absent.
+
+### Features
+
+- ~~**`plane module update` / `plane cycle update`**~~ - shipped: full property set (`--name`, `--description`, `--status`, `--start`, `--target`/`--end`, `--lead`), with the same options added to `create` / `ensure`. Module `lead` (vs `lead_id`) is implemented against the documented name and flagged for a live check. **P1.**
+- ~~**`--module` / `--cycle` on `issue create`**~~ - shipped: joins a module/cycle at creation; `--dry-run` previews the create plus each membership POST, and a post-create membership failure reports partial success with a non-zero exit and the created UUID.
+
+### Polish
+
+- ~~**Tracking columns in the `issue list` table**~~ - shipped: `--columns <list>` on `issue list`/`mine` (id, title, state, priority, due, start, assignee, labels, uuid, created, updated); the default table now includes `DUE`.
+
+---
+
 ## Backlog *(planned, beyond v0.4.2)*
 
-Deferred from field reports (see [plane-cli-roadmap-automation-feedback.md](../context/research/lessons-learned/plane-cli-roadmap-automation-feedback.md)). These are feature-sized and build on the stable, auto-released baseline:
+Deferred from field reports (see [plane-cli-roadmap-automation-feedback.md](../context/research/lessons-learned/plane-cli-roadmap-automation-feedback.md) and [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md)). These are feature-sized and build on the stable, auto-released baseline:
 
 - **`plane issue bulk-create --file <json|yaml>`** - bulk issue import with `--dry-run` / `--validate-only` preflight (reports missing labels/modules/cycles, invalid assignee/state/date) before mutating.
 - **Missing-label automation** - `--create-labels`, `--ignore-missing-labels`, `--validate-only` on issue create.
 - **`--description-file <path>` / stdin (`-`)** - avoid fragile heredoc quoting for long/multi-paragraph descriptions.
 - **Richer machine-readable error envelope** - add `command`, `retryable`, and `suggestedFix` to `--json` error output.
 - **Bulk assignment alternatives** - support `--issues` / `--cycle` flags or repeated positional refs alongside comma-separated issue refs.
+- **`plane issue update --from-json <file|->`** - per-issue batch mutations with distinct values per ticket, resolving name→id maps once and reusing the session (write-side complement to `issue bulk-create`). From the 2026-07-10 report; see [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md).
+- **On-disk resolver cache** - cache project/state/member/label maps keyed by workspace+project, invalidated on 404/name-miss + TTL, to cut per-command latency (~5–6 s cold start today).
+- **Workspace-level pages fallback + capability detection** - on project-pages 404, try the workspace-pages endpoint and advertise page capability in `discover` (the 404→friendly-message wrapper already shipped in v0.4.0).
 
 ---
 

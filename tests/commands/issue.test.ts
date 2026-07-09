@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { assertIssueUpdateRoundTrip, createIssueCommand } from "../../src/commands/issue.js";
+import {
+  assertIssueUpdateRoundTrip,
+  createIssueCommand,
+  resolveIssueColumns,
+} from "../../src/commands/issue.js";
 import type { PlaneIssue } from "../../src/core/types.js";
 
 function issue(overrides: Partial<PlaneIssue> = {}): PlaneIssue {
@@ -166,5 +170,61 @@ describe("issue get --fields", () => {
 
     expect(JSON.parse(log.mock.calls[0][0] as string)).toEqual({ title: "Thing", state: "Todo" });
     expect(err).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveIssueColumns", () => {
+  it("defaults to id/title/state/priority/due (DUE tracking column included)", () => {
+    expect(resolveIssueColumns(undefined)).toEqual(["id", "title", "state", "priority", "due"]);
+  });
+
+  it("returns the requested columns, lowercased", () => {
+    expect(resolveIssueColumns("id,Title,DUE,assignee")).toEqual([
+      "id",
+      "title",
+      "due",
+      "assignee",
+    ]);
+  });
+
+  it("throws a ValidationError naming unknown columns", () => {
+    expect(() => resolveIssueColumns("id,bogus")).toThrow(/Unknown --columns name\(s\): bogus/);
+  });
+});
+
+describe("issue list --columns", () => {
+  it("renders exactly the requested columns", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    mockListFetch([
+      {
+        id: "issue-1",
+        sequence_id: 7,
+        name: "Ship it",
+        state: "state-1",
+        priority: "high",
+        target_date: "2030-01-01",
+        assignees: ["user-9"],
+      },
+    ]);
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["list", "--columns", "id,title,due,assignee"], {
+      from: "user",
+    });
+
+    const output = log.mock.calls.map((c) => String(c[0]));
+    const header = output[0];
+    expect(header).toContain("ID");
+    expect(header).toContain("TITLE");
+    expect(header).toContain("DUE");
+    expect(header).toContain("ASSIGNEE");
+    expect(header).not.toContain("STATE");
+    expect(header).not.toContain("PRIORITY");
+
+    const dataRow = output[output.length - 1];
+    expect(dataRow).toContain("ROADMAP-7");
+    expect(dataRow).toContain("2030-01-01");
+    expect(dataRow).toContain("user-9");
   });
 });

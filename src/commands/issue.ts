@@ -161,6 +161,10 @@ export function createIssueCommand(): Command {
     .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
     .option("--json", "Output raw JSON")
     .option("--fields <names>", "Comma-separated fields for JSON output")
+    .option(
+      "--columns <list>",
+      "Comma-separated columns for the table (id,title,state,priority,due,start,assignee,labels,uuid,created,updated)",
+    )
     .action(
       async (opts: {
         workspace?: string;
@@ -171,6 +175,7 @@ export function createIssueCommand(): Command {
         updatedSince?: string;
         json?: boolean;
         fields?: string;
+        columns?: string;
       }) => {
         try {
           const config = loadConfig();
@@ -219,6 +224,7 @@ export function createIssueCommand(): Command {
             updatedSince: opts.updatedSince,
             json: opts.json,
             fields: opts.fields,
+            columns: opts.columns,
           });
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
@@ -244,6 +250,10 @@ export function createIssueCommand(): Command {
     .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
     .option("--json", "Output raw JSON")
     .option("--fields <names>", "Comma-separated fields for JSON output")
+    .option(
+      "--columns <list>",
+      "Comma-separated columns for the table (id,title,state,priority,due,start,assignee,labels,uuid,created,updated)",
+    )
     .action(
       async (opts: {
         workspace?: string;
@@ -253,6 +263,7 @@ export function createIssueCommand(): Command {
         updatedSince?: string;
         json?: boolean;
         fields?: string;
+        columns?: string;
       }) => {
         try {
           const config = loadConfig();
@@ -287,6 +298,7 @@ export function createIssueCommand(): Command {
             updatedSince: opts.updatedSince,
             json: opts.json,
             fields: opts.fields,
+            columns: opts.columns,
           });
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
@@ -1231,6 +1243,58 @@ function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 
+type IssueColumn = {
+  header: string;
+  get: (normalized: Record<string, unknown>) => string;
+};
+
+function cell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) return value.map(String).join(",");
+  return String(value);
+}
+
+// Curated columns for the human issue table. Values come from the normalized
+// issue so the column set stays consistent with `--fields` / `--json` output.
+const ISSUE_COLUMNS: Record<string, IssueColumn> = {
+  id: { header: "ID", get: (n) => cell(n.identifier) },
+  uuid: { header: "UUID", get: (n) => cell(n.id) },
+  title: { header: "TITLE", get: (n) => cell(n.title) },
+  state: { header: "STATE", get: (n) => cell(n.state) },
+  priority: { header: "PRIORITY", get: (n) => cell(n.priority) },
+  due: { header: "DUE", get: (n) => cell(n.dueDate) },
+  start: { header: "START", get: (n) => cell(n.startDate) },
+  assignee: { header: "ASSIGNEE", get: (n) => cell(n.assignees) },
+  labels: { header: "LABELS", get: (n) => cell(n.labels) },
+  created: { header: "CREATED", get: (n) => cell(n.createdAt) },
+  updated: { header: "UPDATED", get: (n) => cell(n.updatedAt) },
+};
+
+const DEFAULT_ISSUE_COLUMNS = ["id", "title", "state", "priority", "due"];
+
+/**
+ * Resolve the `--columns` value to a validated list of column keys, defaulting
+ * to id/title/state/priority/due (which adds the DUE tracking column). Throws a
+ * ValidationError naming any unknown columns.
+ */
+export function resolveIssueColumns(columnsCsv: string | undefined): string[] {
+  if (!columnsCsv) return DEFAULT_ISSUE_COLUMNS;
+  const requested = columnsCsv
+    .split(/[,\s]+/)
+    .map((c) => c.trim().toLowerCase())
+    .filter(Boolean);
+  if (requested.length === 0) return DEFAULT_ISSUE_COLUMNS;
+  const unknown = requested.filter((c) => !(c in ISSUE_COLUMNS));
+  if (unknown.length > 0) {
+    throw new ValidationError(
+      `Unknown --columns name(s): ${unknown.join(", ")}. Valid columns: ${Object.keys(
+        ISSUE_COLUMNS,
+      ).join(", ")}.`,
+    );
+  }
+  return requested;
+}
+
 async function listIssuesCore(
   client: import("../core/api-client.js").PlaneApiClient,
   ws: string,
@@ -1243,10 +1307,14 @@ async function listIssuesCore(
     updatedSince?: string;
     json?: boolean;
     fields?: string;
+    columns?: string;
   },
 ): Promise<void> {
   const style = client.issuesSegment();
   const basePath = `workspaces/${ws}/projects/${projectId}/${style}/`;
+
+  // Validate requested columns up-front so a typo fails before any network calls.
+  const columns = resolveIssueColumns(opts.columns);
 
   const [allIssues, stateList] = await Promise.all([
     fetchAll<PlaneIssue>(client, basePath),
@@ -1312,11 +1380,12 @@ async function listIssuesCore(
     return;
   }
 
-  const rows = issues.map((issue) => [
-    `${identifier}-${issue.sequence_id}`,
-    issue.name,
-    resolveState(issue, stateMap),
-    issue.priority ?? "",
-  ]);
-  printTable(rows, ["ID", "TITLE", "STATE", "PRIORITY"]);
+  const rows = issues.map((issue) => {
+    const normalized = normalizeIssue(issue, stateMap, identifier, projectId);
+    return columns.map((col) => ISSUE_COLUMNS[col].get(normalized));
+  });
+  printTable(
+    rows,
+    columns.map((col) => ISSUE_COLUMNS[col].header),
+  );
 }

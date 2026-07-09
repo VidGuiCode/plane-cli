@@ -7,7 +7,7 @@ import {
 } from "../core/config-store.js";
 import { unwrap, fetchAll } from "../core/api-client.js";
 import { printInfo, printTable, printJson } from "../core/output.js";
-import { exitWithError } from "../core/errors.js";
+import { exitWithError, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import {
   resolveProject,
@@ -18,6 +18,24 @@ import {
   normalizeIssue,
 } from "../core/resolvers.js";
 import type { PlaneCycle, PlaneIssue, PlaneState } from "../core/types.js";
+
+/**
+ * Map CLI property options to the Plane cycle PATCH body. Field names mirror the
+ * working cycle create pattern (start_date/end_date) and the cycle GET response.
+ */
+function buildCycleBody(opts: {
+  name?: string;
+  description?: string;
+  start?: string;
+  end?: string;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (opts.name !== undefined) body.name = opts.name;
+  if (opts.description !== undefined) body.description = opts.description;
+  if (opts.start !== undefined) body.start_date = opts.start === "none" ? null : opts.start;
+  if (opts.end !== undefined) body.end_date = opts.end === "none" ? null : opts.end;
+  return body;
+}
 
 function splitIssueRefs(issueRefs: string): string[] {
   const refs = issueRefs
@@ -393,6 +411,7 @@ export function createCycleCommand(): Command {
   command
     .command("create <name>")
     .description("Create a new cycle")
+    .option("--description <text>", "Cycle description")
     .option("--start <date>", "Start date (YYYY-MM-DD)")
     .option("--end <date>", "End date (YYYY-MM-DD)")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
@@ -405,6 +424,7 @@ export function createCycleCommand(): Command {
       async (
         name: string,
         opts: {
+          description?: string;
           start?: string;
           end?: string;
           workspace?: string;
@@ -425,9 +445,11 @@ export function createCycleCommand(): Command {
             projectId = requireActiveProject(config).id;
           }
 
-          const body: Record<string, string> = { name, project_id: projectId };
-          if (opts.start) body.start_date = opts.start;
-          if (opts.end) body.end_date = opts.end;
+          const body: Record<string, unknown> = {
+            name,
+            project_id: projectId,
+            ...buildCycleBody(opts),
+          };
 
           const path = `workspaces/${ws}/projects/${projectId}/cycles/`;
           if (isDryRunEnabled()) {
@@ -454,11 +476,85 @@ export function createCycleCommand(): Command {
       },
     );
 
-  // ── delete ─────────────────────────────────────────────────────────────────
+  // ── update ──────────────────────────────────────────────────────────────────
+
+  command
+    .command("update <cycle>")
+    .description("Update a cycle's properties (name or UUID)")
+    .option("--name <name>", "New cycle name")
+    .option("--description <text>", "Cycle description")
+    .option("--start <date>", "Start date (YYYY-MM-DD, use 'none' to clear)")
+    .option("--end <date>", "End date (YYYY-MM-DD, use 'none' to clear)")
+    .option("--workspace <slug>", "Workspace slug (overrides active context)")
+    .option(
+      "--project <identifier-or-name>",
+      "Project identifier or name (overrides active context)",
+    )
+    .option("--json", "Output raw JSON")
+    .action(
+      async (
+        cycleRef: string,
+        opts: {
+          name?: string;
+          description?: string;
+          start?: string;
+          end?: string;
+          workspace?: string;
+          project?: string;
+          json?: boolean;
+        },
+      ) => {
+        try {
+          const config = loadConfig();
+          const client = createClient(config);
+          const ws = opts.workspace ?? requireActiveWorkspace(config);
+
+          let projectId: string;
+          if (opts.project) {
+            const proj = await resolveProject(client, ws, opts.project);
+            projectId = proj.id;
+          } else {
+            projectId = requireActiveProject(config).id;
+          }
+
+          const cycle = await resolveCycle(client, ws, projectId, cycleRef);
+          const body = buildCycleBody(opts);
+          if (Object.keys(body).length === 0) {
+            throw new ValidationError(
+              "Nothing to update. Use --name, --description, --start, or --end.",
+            );
+          }
+
+          const path = `workspaces/${ws}/projects/${projectId}/cycles/${cycle.id}/`;
+          if (isDryRunEnabled()) {
+            printJson({
+              dryRun: true,
+              method: "PATCH",
+              path,
+              body,
+              context: { workspace: ws, projectId, cycleId: cycle.id },
+            });
+            return;
+          }
+
+          const updated = await client.patch<PlaneCycle>(path, body);
+          if (opts.json) {
+            printJson(updated);
+            return;
+          }
+          printInfo(`Cycle "${updated.name}" updated successfully.`);
+        } catch (err) {
+          exitWithError(err, Boolean(opts.json));
+        }
+      },
+    );
+
+  // ── ensure ──────────────────────────────────────────────────────────────────
 
   command
     .command("ensure <name>")
     .description("Return an existing cycle by name, or create it if missing")
+    .option("--description <text>", "Cycle description (applied only when creating)")
     .option("--start <date>", "Start date (YYYY-MM-DD)")
     .option("--end <date>", "End date (YYYY-MM-DD)")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
@@ -471,6 +567,7 @@ export function createCycleCommand(): Command {
       async (
         name: string,
         opts: {
+          description?: string;
           start?: string;
           end?: string;
           workspace?: string;
@@ -503,9 +600,11 @@ export function createCycleCommand(): Command {
             return;
           }
 
-          const body: Record<string, string> = { name, project_id: projectId };
-          if (opts.start) body.start_date = opts.start;
-          if (opts.end) body.end_date = opts.end;
+          const body: Record<string, unknown> = {
+            name,
+            project_id: projectId,
+            ...buildCycleBody(opts),
+          };
 
           if (isDryRunEnabled()) {
             printJson({

@@ -136,4 +136,74 @@ describe("module command", () => {
       body: { issues: ["issue-1", "issue-2", "issue-3"] },
     });
   });
+
+  it("dry-runs a module update PATCH with mapped fields and a resolved lead", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+    mockFetch((url) => {
+      if (url.includes("/members/")) {
+        return { results: [{ id: "mem-1", display_name: "Alice", member: "user-1" }] };
+      }
+      if (url.includes("/modules/")) {
+        return { results: [{ id: "module-1", name: "Website Deployment" }] };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createModuleCommand().parseAsync(
+      [
+        "update",
+        "Website Deployment",
+        "--status",
+        "in-progress",
+        "--target",
+        "2030-06-01",
+        "--lead",
+        "Alice",
+        "--json",
+      ],
+      { from: "user" },
+    );
+
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({
+      dryRun: true,
+      method: "PATCH",
+      path: "workspaces/workspace/projects/project-123/modules/module-1/",
+      body: { status: "in-progress", target_date: "2030-06-01", lead: "user-1" },
+    });
+  });
+
+  it("includes new properties when creating a module", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+    mockFetch(() => ({}));
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createModuleCommand().parseAsync(
+      [
+        "create",
+        "Milestone 1",
+        "--description",
+        "First milestone",
+        "--status",
+        "planned",
+        "--target",
+        "2030-06-01",
+        "--json",
+      ],
+      { from: "user" },
+    );
+
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({
+      method: "POST",
+      path: "workspaces/workspace/projects/project-123/modules/",
+      body: {
+        name: "Milestone 1",
+        description: "First milestone",
+        status: "planned",
+        target_date: "2030-06-01",
+      },
+    });
+  });
 });

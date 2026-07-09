@@ -240,4 +240,57 @@ describe("cycle command", () => {
       path: "workspaces/workspace/projects/project-123/cycles/cycle-1/cycle-issues/issue-1/",
     });
   });
+
+  it("dry-runs a cycle update PATCH with mapped fields", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+    mockFetch((url) => {
+      if (url.includes("/cycles/")) {
+        return { results: [{ id: "cycle-1", name: "Website Deployment" }] };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createCycleCommand().parseAsync(
+      [
+        "update",
+        "Website Deployment",
+        "--name",
+        "Website v2",
+        "--start",
+        "2026-06-01",
+        "--end",
+        "2026-06-30",
+        "--json",
+      ],
+      { from: "user" },
+    );
+
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({
+      dryRun: true,
+      method: "PATCH",
+      path: "workspaces/workspace/projects/project-123/cycles/cycle-1/",
+      body: { name: "Website v2", start_date: "2026-06-01", end_date: "2026-06-30" },
+    });
+  });
+
+  it("includes description when creating a cycle", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createCycleCommand().parseAsync(
+      ["create", "Sprint 1", "--description", "First sprint", "--json"],
+      { from: "user" },
+    );
+
+    expect(
+      (JSON.parse(log.mock.calls[0][0] as string) as { body: Record<string, unknown> }).body,
+    ).toMatchObject({
+      name: "Sprint 1",
+      project_id: "project-123",
+      description: "First sprint",
+    });
+  });
 });

@@ -736,7 +736,9 @@ export function createIssueCommand(): Command {
             printTable(rows, ["ID", "TITLE"]);
           } else {
             const issue = updated[0];
-            printInfo(`Updated ${resolved[0].identifier}-${issue.sequence_id}: ${issue.name}`);
+            printInfo(
+              `Updated ${resolved[0].identifier}-${issue.sequence_id}: ${issue.name} (uuid: ${resolved[0].issueId})`,
+            );
           }
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
@@ -805,7 +807,7 @@ export function createIssueCommand(): Command {
             return;
           }
           printInfo(
-            `Deleted ${identifier && sequenceId !== undefined ? `${identifier}-${sequenceId}` : issueRef}.`,
+            `Deleted ${identifier && sequenceId !== undefined ? `${identifier}-${sequenceId}` : issueRef} (uuid: ${issueId}).`,
           );
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
@@ -882,7 +884,9 @@ export function createIssueCommand(): Command {
             printJson(issue);
             return;
           }
-          printInfo(`Closed ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef}.`);
+          printInfo(
+            `Closed ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef} (uuid: ${issueId}).`,
+          );
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
         }
@@ -961,7 +965,9 @@ export function createIssueCommand(): Command {
             printJson(issue);
             return;
           }
-          printInfo(`Reopened ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef}.`);
+          printInfo(
+            `Reopened ${identifier ? `${identifier}-${issue.sequence_id}` : issueRef} (uuid: ${issueId}).`,
+          );
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
         }

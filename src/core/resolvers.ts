@@ -1,5 +1,6 @@
 import type { PlaneApiClient } from "./api-client.js";
 import { unwrap, fetchAll } from "./api-client.js";
+import { ValidationError } from "./errors.js";
 import type {
   PlaneProject,
   PlaneIssue,
@@ -126,9 +127,25 @@ async function findIssueBySeq(
     client,
     `workspaces/${ws}/projects/${projectId}/${style}/`,
   );
-  const found = issues.find((i) => i.sequence_id === seq);
-  if (!found) throw new Error(`Issue ${originalRef} not found.`);
-  return { id: found.id, sequenceId: found.sequence_id };
+  const matches = issues.filter((i) => i.sequence_id === seq);
+  if (matches.length === 0) throw new Error(`Issue ${originalRef} not found.`);
+  if (matches.length === 1) {
+    return { id: matches[0].id, sequenceId: matches[0].sequence_id };
+  }
+
+  // Duplicate sequence_id (real in migrated/imported projects). Resolving to the
+  // first match silently mutates the wrong issue and reports success, so refuse to
+  // guess and list every candidate by UUID. Fetch state names only here, on this
+  // slow ambiguous path, to keep the common single-match path free of extra calls.
+  const stateRes = await client.get<unknown>(`workspaces/${ws}/projects/${projectId}/states/`);
+  const stateMap = buildStateMap(unwrap<PlaneState>(stateRes));
+  const candidates = matches
+    .map((i) => `  ${i.id} — ${resolveState(i, stateMap)} — ${i.name}`)
+    .join("\n");
+  throw new ValidationError(
+    `Ambiguous issue ref "${originalRef}": ${matches.length} issues share sequence ${seq}. ` +
+      `Re-run with the exact UUID of the one you mean:\n${candidates}`,
+  );
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────

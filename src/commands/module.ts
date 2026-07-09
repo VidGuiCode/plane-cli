@@ -277,7 +277,7 @@ export function createModuleCommand(): Command {
           }
           printInfo(
             issueIds.length === 1
-              ? `Issue added to module "${mod.name}".`
+              ? `Issue added to module "${mod.name}" (uuid: ${issueIds[0]}).`
               : `${issueIds.length} issues added to module "${mod.name}".`,
           );
         } catch (err) {
@@ -419,7 +419,7 @@ export function createModuleCommand(): Command {
             });
             return;
           }
-          printInfo(`Issue removed from module "${mod.name}".`);
+          printInfo(`Issue removed from module "${mod.name}" (uuid: ${issueId}).`);
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
         }

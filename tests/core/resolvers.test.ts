@@ -1,6 +1,24 @@
-import { describe, expect, it } from "vitest";
-import { parseIssueRef, normalizeIssue } from "../../src/core/resolvers.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { parseIssueRef, normalizeIssue, resolveIssueRef } from "../../src/core/resolvers.js";
+import { PlaneApiClient } from "../../src/core/api-client.js";
+import { ValidationError } from "../../src/core/errors.js";
 import type { PlaneIssue } from "../../src/core/types.js";
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  vi.restoreAllMocks();
+});
+
+function makeClient(): PlaneApiClient {
+  return new PlaneApiClient({
+    baseUrl: "https://plane.example.test",
+    token: "test-token",
+    apiStyle: "issues",
+    retries: 0,
+  });
+}
 
 function issue(overrides: Partial<PlaneIssue> = {}): PlaneIssue {
   return {
@@ -38,6 +56,70 @@ describe("normalizeIssue label fields", () => {
       "project-123",
     );
     expect(out.label_ids).toEqual(["label-uuid-2"]);
+  });
+});
+
+describe("resolveIssueRef with duplicate sequence_id", () => {
+  function mockFetch(issues: unknown[]): void {
+    globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      let body: unknown = {};
+      if (url.includes("/states/")) {
+        body = {
+          results: [
+            { id: "state-done", name: "Done", group: "completed" },
+            { id: "state-backlog", name: "Backlog", group: "backlog" },
+          ],
+        };
+      } else if (url.includes("/issues/")) {
+        body = { results: issues, next_page_results: false };
+      }
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+  }
+
+  it("throws a ValidationError naming every candidate UUID when a sequence is ambiguous", async () => {
+    mockFetch([
+      { id: "uuid-done", sequence_id: 141, name: "Finished ticket", state: "state-done" },
+      { id: "uuid-backlog", sequence_id: 141, name: "Planned ticket", state: "state-backlog" },
+    ]);
+
+    const client = makeClient();
+    let caught: unknown;
+    try {
+      await resolveIssueRef(client, "workspace", "project-123", "ROADMAP", "issues", "141");
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ValidationError);
+    const message = (caught as Error).message;
+    expect(message).toContain("uuid-done");
+    expect(message).toContain("uuid-backlog");
+    // State names render on the slow duplicate path
+    expect(message).toContain("Done");
+    expect(message).toContain("Backlog");
+    expect(message).toMatch(/ambiguous/i);
+  });
+
+  it("resolves normally when the sequence is unique", async () => {
+    mockFetch([{ id: "uuid-only", sequence_id: 141, name: "Only ticket", state: "state-done" }]);
+
+    const client = makeClient();
+    const result = await resolveIssueRef(
+      client,
+      "workspace",
+      "project-123",
+      "ROADMAP",
+      "issues",
+      "141",
+    );
+
+    expect(result.issueId).toBe("uuid-only");
+    expect(result.sequenceId).toBe(141);
   });
 });
 

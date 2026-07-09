@@ -306,7 +306,7 @@ export function createCycleCommand(): Command {
           }
           printInfo(
             issueIds.length === 1
-              ? `Issue added to cycle "${cycle.name}".`
+              ? `Issue added to cycle "${cycle.name}" (uuid: ${issueIds[0]}).`
               : `${issueIds.length} issues added to cycle "${cycle.name}".`,
           );
         } catch (err) {
@@ -381,7 +381,7 @@ export function createCycleCommand(): Command {
             });
             return;
           }
-          printInfo(`Issue removed from cycle "${cycle.name}".`);
+          printInfo(`Issue removed from cycle "${cycle.name}" (uuid: ${issueId}).`);
         } catch (err) {
           exitWithError(err, Boolean(opts.json));
         }

@@ -67,8 +67,8 @@ function mockFetch(): void {
   }) as unknown as typeof fetch;
 }
 
-describe("issue confirmation strings (no doubled identifier)", () => {
-  it("close PROJ-N prints the identifier once", async () => {
+describe("issue confirmation strings (identifier once, resolved UUID surfaced)", () => {
+  it("close PROJ-N prints the identifier once and the resolved UUID", async () => {
     writeConfig();
     process.argv = ["node", "plane"];
     mockFetch();
@@ -76,10 +76,10 @@ describe("issue confirmation strings (no doubled identifier)", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     await createIssueCommand().parseAsync(["close", "ROADMAP-1"], { from: "user" });
 
-    expect(log).toHaveBeenCalledWith("Closed ROADMAP-1.");
+    expect(log).toHaveBeenCalledWith("Closed ROADMAP-1 (uuid: issue-1).");
   });
 
-  it("delete PROJ-N prints the identifier once", async () => {
+  it("delete PROJ-N prints the identifier once and the resolved UUID", async () => {
     writeConfig();
     process.argv = ["node", "plane"];
     mockFetch();
@@ -87,6 +87,19 @@ describe("issue confirmation strings (no doubled identifier)", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     await createIssueCommand().parseAsync(["delete", "ROADMAP-1"], { from: "user" });
 
-    expect(log).toHaveBeenCalledWith("Deleted ROADMAP-1.");
+    expect(log).toHaveBeenCalledWith("Deleted ROADMAP-1 (uuid: issue-1).");
+  });
+
+  it("update PROJ-N prints the resolved UUID", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    mockFetch();
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["update", "ROADMAP-1", "--title", "Thing"], {
+      from: "user",
+    });
+
+    expect(log).toHaveBeenCalledWith("Updated ROADMAP-1: Thing (uuid: issue-1)");
   });
 });

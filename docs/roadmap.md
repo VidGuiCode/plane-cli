@@ -151,17 +151,17 @@ From the 2026-07-10 production-use gap report. See [production-use-gap-report.md
 
 ---
 
-## v0.4.4 *(planned)* — close the v0.4.3 loop
+## v0.4.4 *(shipped)* — close the v0.4.3 loop
 
-Small, low-risk patch: settle the two verification items left open by v0.4.3 (implemented offline, never confirmed against a live instance) plus one agent-facing nicety. **Effort: S.** Needs live creds for the verification.
+Small, low-risk patch: settled the two verification items left open by v0.4.3 (implemented offline, never confirmed against a live instance) plus one agent-facing nicety. **Effort: S.** Both verifications were run live against a real work-items instance.
 
 ### Bug Fixes / Verification
 
-- **Confirm module `lead` and member-role field names on a live instance** - v0.4.3's `module update --lead` maps to `lead` (vs `lead_id`), and `members list` reads role nested→annotated→top-level; both were implemented against documented names without live confirmation. Verify via `module update --dry-run` and `members list --json` on a real instance and correct the mapping if it differs. See [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md).
+- ~~**Confirm module `lead` and member-role field names on a live instance**~~ - shipped: live-verified against a real work-items instance. Module `lead` (not `lead_id`) is the correct write key — `PATCH { lead }` persists, `PATCH { lead_id }` is silently ignored. The workspace `members/` endpoint returns role as a top-level `role` field, which `getMemberRole` already reads. Both v0.4.3 mappings were correct; no behavior change (code comment updated to reflect live confirmation). See [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md).
 
 ### Polish
 
-- **Advertise page (un)support in `discover`** - `discover context` / `issue-inputs` flag whether Pages are usable so agents skip the surface instead of probing. See [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md).
+- ~~**Advertise page (un)support in `discover`**~~ - shipped: `discover context` / `issue-inputs` now emit an additive `capabilities.pages` (`{ supported, reason }`) via a lightweight, non-fatal probe of the project-pages endpoint so agents skip the surface instead of probing. See [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md).
 
 ---
 

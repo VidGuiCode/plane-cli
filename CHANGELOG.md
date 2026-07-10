@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.4
+
+Closes the two verification items left open by v0.4.3 (both implemented offline against documented field names, never confirmed live) plus one agent-facing discovery nicety. See [pages-support-root-cause.md](context/research/lessons-learned/pages-support-root-cause.md) and [production-use-gap-report.md](context/research/lessons-learned/production-use-gap-report.md).
+
+### Polish
+- **`discover` advertises Plane Pages (un)support** — `discover context` and `discover issue-inputs` now include an additive `capabilities.pages` field (`{ supported, reason }`) so AI agents can skip the Pages surface instead of probing and hitting a 404. The probe is a lightweight, non-fatal GET of the project-pages endpoint: a 404 reports `supported: false`, a success reports `supported: true`, and any probe error (or no project in context) reports `supported: null` — the probe can never make `discover` fail, and `--json` output stays pure JSON.
+
+### Verification
+- **Module `lead` write key confirmed live** — verified against a real work-items instance that `module update`/`create --lead` must send body key `lead` (not `lead_id`): `PATCH { lead }` persists on read-back, while `PATCH { lead_id }` is silently ignored. The v0.4.3 mapping was already correct; the code comment is updated from "unverified offline" to live-confirmed. No behavior change.
+- **Member-role field shape confirmed live** — the token-authenticated workspace `members/` endpoint returns role as a top-level `role` field (no nested/annotated shape on this instance), which the v0.4.3 `getMemberRole` helper already reads correctly. No behavior change. (Note: the endpoint reports the same role value for every member on that instance — an upstream public-API data quirk, not a field-mapping bug the CLI can remap.)
+
 ## 0.4.3
 
 Clears the actionable items from the 2026-07-10 production-use gap report. See [production-use-gap-report.md](context/research/lessons-learned/production-use-gap-report.md).

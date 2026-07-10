@@ -1,6 +1,6 @@
 {
   "name": "plane-cli",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Unofficial CLI for Plane",
   "license": "MIT",
   "private": false,

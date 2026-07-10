@@ -34,8 +34,9 @@ interface ModulePropertyOpts {
 /**
  * Map CLI property options to the Plane module PATCH/POST body. Field names
  * mirror the module GET response (name/description/status/start_date/target_date)
- * and Plane's module serializer. NOTE: `lead` (vs `lead_id`) is unverified
- * offline — confirm with a live --dry-run before relying on lead updates.
+ * and Plane's module serializer. `lead` (vs `lead_id`) was live-verified in
+ * v0.4.4 against a work-items instance: `PATCH { lead }` persists, `lead_id` is
+ * silently ignored. See context/research/lessons-learned (v0.4.4 close-loop).
  */
 async function buildModuleBody(
   client: import("../core/api-client.js").PlaneApiClient,

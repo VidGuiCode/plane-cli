@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { createClient, getActiveAccount, loadConfig, requireActiveWorkspace, } from "../core/config-store.js";
 import { exitWithError } from "../core/errors.js";
-import { fetchIssueInputOptions, fetchMembers, fetchProjects, resolveProjectContext, } from "../core/discovery.js";
+import { fetchIssueInputOptions, fetchMembers, fetchProjects, probePagesSupport, resolveProjectContext, } from "../core/discovery.js";
 import { getMemberDisplayName, getMemberEmail } from "../core/resolvers.js";
 import { printJson } from "../core/output.js";
 const PRIORITIES = ["urgent", "high", "medium", "low", "none"];
@@ -26,9 +26,13 @@ export function createDiscoverCommand() {
                     ? await resolveProjectContext(client, config, workspace)
                     : null;
             const user = await client.get("users/me/");
+            const pages = project
+                ? await probePagesSupport(client, workspace, project.projectId)
+                : { supported: null, reason: "no project in context to probe" };
             printJson({
                 schemaVersion: 1,
                 kind: "context",
+                capabilities: { pages },
                 context: {
                     account: account
                         ? {
@@ -109,9 +113,10 @@ export function createDiscoverCommand() {
             const account = getActiveAccount(config);
             const workspace = opts.workspace ?? requireActiveWorkspace(config);
             const project = await resolveProjectContext(client, config, workspace, opts.project);
-            const [projects, inputs] = await Promise.all([
+            const [projects, inputs, pages] = await Promise.all([
                 fetchProjects(client, workspace),
                 fetchIssueInputOptions(client, workspace, project.projectId),
+                probePagesSupport(client, workspace, project.projectId),
             ]);
             const resolvedProject = projects.find((candidate) => candidate.id === project.projectId) ?? null;
             const completed = inputs.states.find((state) => state.group === "completed") ?? null;
@@ -121,6 +126,7 @@ export function createDiscoverCommand() {
             printJson({
                 schemaVersion: 1,
                 kind: "issue-inputs",
+                capabilities: { pages },
                 context: {
                     account: account
                         ? {

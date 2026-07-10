@@ -10,7 +10,9 @@ import {
   fetchIssueInputOptions,
   fetchMembers,
   fetchProjects,
+  probePagesSupport,
   resolveProjectContext,
+  type PagesCapability,
 } from "../core/discovery.js";
 import { getMemberDisplayName, getMemberEmail } from "../core/resolvers.js";
 import { printJson } from "../core/output.js";
@@ -51,9 +53,14 @@ export function createDiscoverCommand(): Command {
           role?: number;
         }>("users/me/");
 
+        const pages: PagesCapability = project
+          ? await probePagesSupport(client, workspace, project.projectId)
+          : { supported: null, reason: "no project in context to probe" };
+
         printJson({
           schemaVersion: 1,
           kind: "context",
+          capabilities: { pages },
           context: {
             account: account
               ? {
@@ -138,9 +145,10 @@ export function createDiscoverCommand(): Command {
         const account = getActiveAccount(config);
         const workspace = opts.workspace ?? requireActiveWorkspace(config);
         const project = await resolveProjectContext(client, config, workspace, opts.project);
-        const [projects, inputs] = await Promise.all([
+        const [projects, inputs, pages] = await Promise.all([
           fetchProjects(client, workspace),
           fetchIssueInputOptions(client, workspace, project.projectId),
+          probePagesSupport(client, workspace, project.projectId),
         ]);
         const resolvedProject =
           projects.find((candidate) => candidate.id === project.projectId) ?? null;
@@ -153,6 +161,7 @@ export function createDiscoverCommand(): Command {
         printJson({
           schemaVersion: 1,
           kind: "issue-inputs",
+          capabilities: { pages },
           context: {
             account: account
               ? {

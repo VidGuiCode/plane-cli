@@ -151,20 +151,57 @@ From the 2026-07-10 production-use gap report. See [production-use-gap-report.md
 
 ---
 
-## Backlog *(planned, beyond v0.4.2)*
+## v0.4.4 *(planned)* — close the v0.4.3 loop
 
-Deferred from field reports (see [plane-cli-roadmap-automation-feedback.md](../context/research/lessons-learned/plane-cli-roadmap-automation-feedback.md) and [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md)). These are feature-sized and build on the stable, auto-released baseline:
+Small, low-risk patch: settle the two verification items left open by v0.4.3 (implemented offline, never confirmed against a live instance) plus one agent-facing nicety. **Effort: S.** Needs live creds for the verification.
 
-- **`plane issue bulk-create --file <json|yaml>`** - bulk issue import with `--dry-run` / `--validate-only` preflight (reports missing labels/modules/cycles, invalid assignee/state/date) before mutating.
-- **Missing-label automation** - `--create-labels`, `--ignore-missing-labels`, `--validate-only` on issue create.
-- **`--description-file <path>` / stdin (`-`)** - avoid fragile heredoc quoting for long/multi-paragraph descriptions.
-- **Richer machine-readable error envelope** - add `command`, `retryable`, and `suggestedFix` to `--json` error output.
-- **Bulk assignment alternatives** - support `--issues` / `--cycle` flags or repeated positional refs alongside comma-separated issue refs.
-- **`plane issue update --from-json <file|->`** - per-issue batch mutations with distinct values per ticket, resolving name→id maps once and reusing the session (write-side complement to `issue bulk-create`). From the 2026-07-10 report; see [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md).
-- **On-disk resolver cache** - cache project/state/member/label maps keyed by workspace+project, invalidated on 404/name-miss + TTL, to cut per-command latency (~5–6 s cold start today).
-- ~~**Workspace-level pages fallback**~~ - **wontfix**: a root-cause probe (2026-07-10) confirmed the unversioned workspace-pages endpoint returns **401** with the CLI's API key — Pages are served only by the web app's session-cookie-authenticated internal API, so no CLI-side URL/fallback fix is possible. Confirms the ROADMAP-175 close-out. See [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md). The 404→friendly-message wrapper already shipped in v0.4.0.
-- **Advertise page (un)support in `discover`** - optional nicety so agents skip the unsupported Pages surface instead of probing. The only actionable CLI-side change from the pages investigation, and a low-value one — build only if an agent workflow needs it. See [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md).
+### Bug Fixes / Verification
+
+- **Confirm module `lead` and member-role field names on a live instance** - v0.4.3's `module update --lead` maps to `lead` (vs `lead_id`), and `members list` reads role nested→annotated→top-level; both were implemented against documented names without live confirmation. Verify via `module update --dry-run` and `members list --json` on a real instance and correct the mapping if it differs. See [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md).
+
+### Polish
+
+- **Advertise page (un)support in `discover`** - `discover context` / `issue-inputs` flag whether Pages are usable so agents skip the surface instead of probing. See [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md).
 
 ---
 
-Items beyond the current release are added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).
+## v0.5.0 *(planned)* — bulk & latency
+
+The highest-impact remaining theme. In the 2026-07-10 gap report a real ~60-mutation session blew a 2-minute shell timeout because each per-issue update was its own cold-start process. This release makes many-mutation and low-latency workflows first-class. **Effort: L.** Both items target the same pain and are complementary; `--from-json` can ship first if splitting the release. See [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md).
+
+### Features
+
+- **`plane issue update --from-json <file|->`** - per-issue batch mutations with distinct values per ticket, resolving project/state/member/label maps once and PATCHing each entry in a single process. Reuses the v0.4.3 partial-success semantics (report per-entry failures, non-zero exit, created/target ids). Gap report P2.
+
+### Reliability
+
+- **On-disk resolver cache** - cache project/state/member/label maps keyed by workspace+project, invalidated on 404/name-miss + TTL, with an opt-out flag. Cuts the ~5–6 s per-command cold start. Architectural — needs a short design note on cache location and invalidation before implementation. Gap report P2.
+
+---
+
+## v0.6.0 *(planned)* — author from files
+
+Create many issues from a spec file without pre-existing labels or fragile heredoc quoting. Builds on the v0.5.0 batch/latency work. **Effort: L.** The preflight validation is shared across all three items.
+
+### Features
+
+- **`plane issue bulk-create --file <json|yaml>`** - bulk issue import with `--dry-run` / `--validate-only` preflight that reports missing labels/modules/cycles and invalid assignee/state/date before mutating.
+- **Missing-label automation** - `--create-labels`, `--ignore-missing-labels`, `--validate-only` on issue create / bulk-create; shares the preflight validation.
+- **`--description-file <path>` / stdin (`-`)** - long/multi-paragraph descriptions on issue create/update without heredoc quoting; also feeds bulk specs.
+
+---
+
+## Later *(unscheduled)*
+
+Real but lower-impact; slot into a minor/patch when a workflow needs them.
+
+- **Richer machine-readable error envelope** - add `command`, `retryable`, and `suggestedFix` to `--json` error output so agents can branch on failures. Output-contract change — coordinate with consumers.
+- **Bulk assignment alternatives** - `--issues` / repeated positional refs alongside comma-separated refs on module/cycle add.
+
+### Wontfix
+
+- ~~**Workspace-level pages fallback**~~ - Pages are served only by the web app's session-cookie-authenticated internal API; the versioned token endpoint 404s and the unversioned one 401s with an API key, so no CLI-side fix is possible (confirms the ROADMAP-175 close-out). See [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md).
+
+---
+
+Semver: patch bumps (`0.0.1`) for fixes/polish, minor bumps (`0.1.0`) for new commands or input patterns. This is a **proposed sequence, not a commitment** — items may shift between releases or be dropped based on usage and feedback. Suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/plane-cli/issues).

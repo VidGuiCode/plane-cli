@@ -162,7 +162,8 @@ Deferred from field reports (see [plane-cli-roadmap-automation-feedback.md](../c
 - **Bulk assignment alternatives** - support `--issues` / `--cycle` flags or repeated positional refs alongside comma-separated issue refs.
 - **`plane issue update --from-json <file|->`** - per-issue batch mutations with distinct values per ticket, resolving name→id maps once and reusing the session (write-side complement to `issue bulk-create`). From the 2026-07-10 report; see [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md).
 - **On-disk resolver cache** - cache project/state/member/label maps keyed by workspace+project, invalidated on 404/name-miss + TTL, to cut per-command latency (~5–6 s cold start today).
-- **Workspace-level pages fallback + capability detection** - on project-pages 404, try the workspace-pages endpoint and advertise page capability in `discover` (the 404→friendly-message wrapper already shipped in v0.4.0).
+- ~~**Workspace-level pages fallback**~~ - **wontfix**: a root-cause probe (2026-07-10) confirmed the unversioned workspace-pages endpoint returns **401** with the CLI's API key — Pages are served only by the web app's session-cookie-authenticated internal API, so no CLI-side URL/fallback fix is possible. Confirms the ROADMAP-175 close-out. See [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md). The 404→friendly-message wrapper already shipped in v0.4.0.
+- **Advertise page (un)support in `discover`** - optional nicety so agents skip the unsupported Pages surface instead of probing. The only actionable CLI-side change from the pages investigation, and a low-value one — build only if an agent workflow needs it. See [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md).
 
 ---
 

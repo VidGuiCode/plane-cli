@@ -50,8 +50,14 @@ function descriptionMatches(issue, expectedHtml) {
         issue.description_html,
         issue.description_stripped,
         issue.description,
-    ].filter((value) => Boolean(value));
-    return candidates.some((candidate) => candidate.includes(expectedText));
+    ].filter((value) => typeof value === "string");
+    // Empty updates must actually clear the content; every string includes "".
+    return candidates.some((candidate) => expectedText === "" ? stripHtml(candidate) === "" : stripHtml(candidate).includes(expectedText));
+}
+function validateDescriptionInput(opts) {
+    if (opts.description !== undefined && opts.descriptionHtml !== undefined) {
+        throw new ValidationError("--description and --description-html are mutually exclusive.");
+    }
 }
 function arrayContainsAll(actual, expected) {
     if (!Array.isArray(actual) || !Array.isArray(expected))
@@ -297,6 +303,7 @@ export function createIssueCommand() {
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--title <title>", "Issue title")
         .option("--description <description>", "Issue description")
+        .option("--description-html <html>", "Raw HTML description (exclusive with --description)")
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
         .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
         .option("--label <name>", "Label name (case-insensitive, repeatable)", collect, [])
@@ -309,6 +316,7 @@ export function createIssueCommand() {
         .option("--json", "Output raw JSON")
         .action(async (opts) => {
         try {
+            validateDescriptionInput(opts);
             const config = loadConfig();
             const client = createClient(config);
             const ws = opts.workspace ?? requireActiveWorkspace(config);
@@ -329,9 +337,13 @@ export function createIssueCommand() {
             if (!title) {
                 throw new ValidationError("Title is required.");
             }
-            const description = opts.description ?? (await ask("Description (optional)", ""));
+            const description = opts.descriptionHtml !== undefined
+                ? undefined
+                : (opts.description ?? (await ask("Description (optional)", "")));
             const body = { name: title };
-            if (description)
+            if (opts.descriptionHtml !== undefined)
+                body.description_html = opts.descriptionHtml;
+            else if (description)
                 body.description_html = `<p>${description}</p>`;
             if (opts.priority)
                 body.priority = opts.priority;
@@ -456,17 +468,19 @@ export function createIssueCommand() {
         .option("--title <title>", "New title")
         .option("--name <name>", "New title (alias for --title)")
         .option("--description <description>", "New description")
+        .option("--description-html <html>", "Raw HTML description (exclusive with --description)")
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
         .option("--state <state>", "State name or ID")
         .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
         .option("--label <name>", "Label name (case-insensitive, repeatable) — replaces existing labels", collect, [])
         .option("--label-id <uuid>", "Label UUID (repeatable, alternative to --label, skips name resolution)", collect, [])
-        .option("--parent <ref>", "Parent issue ref (sequence number, PROJ-42, or UUID) — single-issue only")
+        .option("--parent <ref>", "Parent issue ref (sequence number, PROJ-42, or UUID; 'none' to clear) — single-issue only")
         .option("--due <YYYY-MM-DD>", "Due date (use 'none' to clear)")
         .option("--start <YYYY-MM-DD>", "Start date (use 'none' to clear)")
         .option("--json", "Output raw JSON")
         .action(async (issueRefArg, opts) => {
         try {
+            validateDescriptionInput(opts);
             const config = loadConfig();
             const client = createClient(config);
             const ws = opts.workspace ?? requireActiveWorkspace(config);
@@ -497,7 +511,9 @@ export function createIssueCommand() {
             const titleValue = opts.title ?? opts.name;
             if (titleValue)
                 baseBody.name = titleValue;
-            if (opts.description)
+            if (opts.descriptionHtml !== undefined)
+                baseBody.description_html = opts.descriptionHtml;
+            else if (opts.description !== undefined)
                 baseBody.description_html = `<p>${opts.description}</p>`;
             if (opts.priority)
                 baseBody.priority = opts.priority;
@@ -536,7 +552,10 @@ export function createIssueCommand() {
                 }));
             }
             // Resolve parent (single-issue only)
-            if (opts.parent) {
+            if (opts.parent === "none") {
+                baseBody.parent = null;
+            }
+            else if (opts.parent) {
                 const { issueId: parentId } = await resolveIssueRef(client, ws, resolved[0].projectId, resolved[0].identifier, style, opts.parent);
                 baseBody.parent = parentId;
             }
@@ -544,7 +563,7 @@ export function createIssueCommand() {
                 !opts.state &&
                 opts.label.length === 0 &&
                 opts.labelId.length === 0) {
-                throw new ValidationError("Nothing to update. Use --title (or --name), --description, --priority, --state, --assignee, --label, --label-id, --parent, --due, or --start.");
+                throw new ValidationError("Nothing to update. Use --title (or --name), --description, --description-html, --priority, --state, --assignee, --label, --label-id, --parent, --due, or --start.");
             }
             // Dry-run: print all payloads and exit
             if (isDryRunEnabled()) {

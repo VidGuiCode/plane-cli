@@ -21,10 +21,13 @@ export declare function fetchMembers(client: PlaneApiClient, workspace: string):
  * - `supported: true`  — the token-authenticated project-pages endpoint answered.
  * - `supported: false` — it returned 404 (Pages are not on the public API here).
  * - `supported: null`  — could not be determined (probe error, or no project to probe).
+ * `operations` is non-null for schema stability: the documented operation list
+ * when supported, `[]` otherwise.
  */
 export interface PagesCapability {
     supported: boolean | null;
     reason: string | null;
+    operations: readonly string[];
 }
 /**
  * Non-fatal probe: can this instance serve project Pages over the

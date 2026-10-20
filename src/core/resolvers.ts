@@ -22,11 +22,12 @@ export async function resolveProject(
 ): Promise<{ id: string; identifier: string; name: string }> {
   const res = await client.get<unknown>(`workspaces/${ws}/projects/`);
   const projects = unwrap<PlaneProject>(res);
-  const match = projects.find(
-    (p) =>
-      p.identifier.toLowerCase() === ref.toLowerCase() ||
-      p.name.toLowerCase() === ref.toLowerCase(),
-  );
+  const lower = ref.toLowerCase();
+  // A UUID copied straight from a browser URL (/projects/<uuid>/…) should resolve
+  // against the project id; fall back to identifier/name for human-typed refs.
+  const match =
+    (UUID_RE.test(ref) && projects.find((p) => p.id.toLowerCase() === lower)) ||
+    projects.find((p) => p.identifier.toLowerCase() === lower || p.name.toLowerCase() === lower);
   if (!match)
     throw new Error(`Project "${ref}" not found in workspace "${ws}". Run: plane project list`);
   return { id: match.id, identifier: match.identifier, name: match.name };

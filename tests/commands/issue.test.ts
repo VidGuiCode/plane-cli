@@ -100,6 +100,36 @@ function mockListFetch(issues: Array<Record<string, unknown>>): void {
 }
 
 describe("assertIssueUpdateRoundTrip", () => {
+  it("requires an explicitly empty description to actually be empty", () => {
+    for (const description_html of ["", "<p></p>"]) {
+      expect(() =>
+        assertIssueUpdateRoundTrip(issue({ description_html }), {
+          description_html: "",
+        }),
+      ).not.toThrow();
+    }
+    expect(() =>
+      assertIssueUpdateRoundTrip(issue({ description_html: "<p>Still here</p>" }), {
+        description_html: "",
+      }),
+    ).toThrow(/description_html/);
+    expect(() => assertIssueUpdateRoundTrip(issue(), { description_html: "" })).toThrow(
+      /description_html/,
+    );
+  });
+
+  it("checks parent assignment and clearing against returned values", () => {
+    expect(() =>
+      assertIssueUpdateRoundTrip(issue({ parent: null }), { parent: null }),
+    ).not.toThrow();
+    expect(() =>
+      assertIssueUpdateRoundTrip(issue({ parent: "parent-id" }), { parent: "parent-id" }),
+    ).not.toThrow();
+    expect(() => assertIssueUpdateRoundTrip(issue({ parent: "old-id" }), { parent: null })).toThrow(
+      /parent/,
+    );
+    expect(() => assertIssueUpdateRoundTrip(issue(), { parent: null })).toThrow(/parent/);
+  });
   it("accepts matching returned fields", () => {
     expect(() =>
       assertIssueUpdateRoundTrip(
@@ -127,6 +157,24 @@ describe("assertIssueUpdateRoundTrip", () => {
     ).not.toThrow();
   });
 
+  it("accepts an escaped description_html-only response (HTML-special characters)", () => {
+    // The API wraps content in block tags and entity-escapes &, <, > before
+    // returning it, and returns only description_html (no description_stripped).
+    // Both sides must go through stripHtml before comparison, or every write
+    // whose text contains &, <, > reports a false failure.
+    expect(() =>
+      assertIssueUpdateRoundTrip(
+        issue({
+          // description_stripped absent: the API returned only description_html.
+          description_html: "<p>A &amp; B &gt; C</p>",
+        }),
+        {
+          description_html: "<p>A & B > C</p>",
+        },
+      ),
+    ).not.toThrow();
+  });
+
   it("throws when a requested field is silently ignored", () => {
     expect(() =>
       assertIssueUpdateRoundTrip(issue({ target_date: null }), {
@@ -141,6 +189,137 @@ describe("assertIssueUpdateRoundTrip", () => {
         labels: ["label-1"],
       }),
     ).toThrow(/labels/);
+  });
+});
+
+describe("issue rewrite inputs", () => {
+  const html = "<h2>Plan</h2>\n<ol><li><strong>Ship</strong> &amp; verify</li></ol>";
+
+  it.each(["create", "update"])("%s sends HTML without adding a wrapper", async (verb) => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    const writes: RequestInit[] = [];
+    mockFetch((_url, init) => {
+      if (init?.method) {
+        writes.push(init);
+        expect(JSON.parse(init.body as string).description_html).toBe(html);
+        return issue({ description_html: html });
+      }
+      return { results: [issue()] };
+    });
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(
+      verb === "create"
+        ? ["create", "--title", "Plan", "--description-html", html, "--json"]
+        : ["update", "1", "--description-html", html, "--json"],
+      { from: "user" },
+    );
+    expect(writes).toHaveLength(1);
+    expect(writes[0].method).toBe(verb === "create" ? "POST" : "PATCH");
+  });
+
+  it.each(["--description", "--description-html"])("update accepts an empty %s", async (flag) => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    const writes: RequestInit[] = [];
+    mockFetch((_url, init) => {
+      if (init?.method) {
+        writes.push(init);
+        expect(JSON.parse(init.body as string)).toEqual({
+          description_html: flag === "--description" ? "<p></p>" : "",
+        });
+        return issue({ description_html: "" });
+      }
+      return { results: [issue()] };
+    });
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["update", "1", flag, "", "--json"], { from: "user" });
+    expect(writes).toHaveLength(1);
+  });
+
+  it.each(["create", "update"])(
+    "%s rejects conflicting text/HTML before API calls",
+    async (verb) => {
+      writeConfig();
+      process.argv = ["node", "plane"];
+      mockFetch(() => ({}));
+      const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      await createIssueCommand().parseAsync(
+        [
+          ...(verb === "create" ? ["create", "--title", "Plan"] : ["update", "1"]),
+          "--description",
+          "",
+          "--description-html",
+          "",
+          "--project",
+          "Other",
+          "--json",
+        ],
+        { from: "user" },
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(exit).toHaveBeenCalledWith(3);
+      expect(JSON.parse(error.mock.calls[0][0] as string).message).toContain("mutually exclusive");
+    },
+  );
+
+  it.each([false, true])(
+    "clears parents without resolving 'none' (dry-run: %s)",
+    async (dryRun) => {
+      writeConfig();
+      process.argv = ["node", "plane", ...(dryRun ? ["--dry-run"] : [])];
+      const writes: RequestInit[] = [];
+      mockFetch((_url, init) => {
+        if (init?.method) {
+          writes.push(init);
+          expect(JSON.parse(init.body as string)).toEqual({ parent: null });
+          return issue({ parent: null });
+        }
+        return { results: [issue({ parent: "old-parent" })] };
+      });
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      await createIssueCommand().parseAsync(["update", "1", "--parent", "none", "--json"], {
+        from: "user",
+      });
+      expect(writes).toHaveLength(dryRun ? 0 : 1);
+      const result = JSON.parse(log.mock.calls[0][0] as string);
+      if (dryRun) expect(result).toMatchObject({ method: "PATCH", body: { parent: null } });
+      else expect(result.parent).toBeNull();
+    },
+  );
+
+  it("continues to assign a resolved parent", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    const writes: RequestInit[] = [];
+    mockFetch((_url, init) => {
+      if (init?.method) {
+        writes.push(init);
+        expect(JSON.parse(init.body as string)).toEqual({ parent: "parent-id" });
+        return issue({ parent: "parent-id" });
+      }
+      return { results: [issue(), issue({ id: "parent-id", sequence_id: 2 })] };
+    });
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["update", "1", "--parent", "2", "--json"], {
+      from: "user",
+    });
+    expect(writes).toHaveLength(1);
+  });
+
+  it("keeps the bulk-parent restriction, including clearing", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    mockFetch(() => ({}));
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["update", "1,2", "--parent", "none", "--json"], {
+      from: "user",
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(3);
+    expect(JSON.parse(error.mock.calls[0][0] as string).message).toContain("bulk updates");
   });
 });
 
@@ -175,9 +354,12 @@ describe("issue get --fields", () => {
 
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    await createIssueCommand().parseAsync(["get", "ROADMAP-1", "--json", "--fields", "title,state"], {
-      from: "user",
-    });
+    await createIssueCommand().parseAsync(
+      ["get", "ROADMAP-1", "--json", "--fields", "title,state"],
+      {
+        from: "user",
+      },
+    );
 
     expect(JSON.parse(log.mock.calls[0][0] as string)).toEqual({ title: "Thing", state: "Todo" });
     expect(err).not.toHaveBeenCalled();

@@ -2,7 +2,7 @@
 
 Unofficial CLI for [Plane](https://plane.so) — manage your workspace, projects, and issues from any terminal or IDE.
 
-![Version](https://img.shields.io/badge/version-0.4.1-blue)
+![Version](https://img.shields.io/badge/version-0.4.6-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20mac-lightgrey)
@@ -16,7 +16,7 @@ Works with self-hosted Plane instances and Plane Cloud. Token-based auth — no 
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.4.1/plane-cli-0.4.1.tgz
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.4.6/plane-cli-0.4.6.tgz
 plane --version
 plane login
 ```
@@ -68,14 +68,32 @@ Context (account, workspace, project) is sticky — set it once and every comman
 | **Modules** | `module list`, `issues`, `create`, `ensure`, `add`, `remove`, `delete` |
 | **Labels** | `label list`, `create`, `ensure`, `update`, `delete`, `add`, `remove` |
 | **Comments** | `comment list`, `add`, `update`, `delete` |
-| **Pages** | `page list`, `get`, `search`, `create`, `update`, `delete` |
+| **Pages** | `page list`, `get`, `search`, `create`, `archive`, `unarchive`, `update`*, `delete`* |
 | **States** | `state list` |
 | **Discovery** | `discover context`, `projects`, `issue-inputs`, `states`, `members`, `labels`, `cycles`, `modules` |
 | **Utility** | `members list`, `completion`, `upgrade` |
 
+\* Page availability depends on the instance's edition and API version (`discover context` reports `capabilities.pages`). The CLI uses the project-pages public API; older Community instances may return 404. Page updates use the documented `PUT` method; use `--method PATCH` for an instance known to support PATCH. A 404/405 reports the failed endpoint/method. Discovery lists baseline operations conservatively and does not infer update/delete support from a successful list probe. `page archive` (reversed by `page unarchive`) retires a page without deleting it.
+
 Issue refs are flexible: `42` (active project), `PROJ-42` (any project), or a full UUID. Commands that accept multiple issue refs use comma-separated values, for example `ROADMAP-157,158,159`.
 
 Run `plane <command> --help` for full options on any command.
+
+### Rich text and parent links (v0.4.6)
+
+Use explicit HTML flags to preserve headings, lists, and other rich text without an extra paragraph wrapper:
+
+```bash
+plane issue create --title "Release plan" --description-html '<h2>Plan</h2><ul><li>Ship</li></ul>'
+plane issue update PROJ-42 --description-html '<h2>Updated plan</h2><p>Ready</p>'
+plane page create "Release plan" --content-html '<h2>Plan</h2><p>Ready</p>'
+plane page update <page-uuid> --content-html '<h2>Updated plan</h2><p>Ready</p>'
+plane issue update PROJ-42 --parent none
+```
+
+`--description` / `--description-html` and `--content` / `--content-html` are mutually exclusive. An explicitly empty value clears content on update (for example, `--description-html ""` or `--content-html ""`). The CLI sends raw HTML unchanged; Plane may sanitize it before storing it.
+
+Page update defaults to `PUT`, which accepts a title, content, or both; content replaces the whole page body. Omitted fields are not sent. For older instances that require PATCH, pass `--method PATCH`. Dry-run previews the selected method; the CLI never falls back to another method automatically. Parent changes, including clearing, accept a single issue only.
 
 <details>
 <summary><strong>Global flags</strong></summary>

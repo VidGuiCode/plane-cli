@@ -78,8 +78,17 @@ function descriptionMatches(issue: PlaneIssue, expectedHtml: string): boolean {
     issue.description_html,
     issue.description_stripped,
     (issue as PlaneIssue & { description?: string }).description,
-  ].filter((value): value is string => Boolean(value));
-  return candidates.some((candidate) => candidate.includes(expectedText));
+  ].filter((value): value is string => typeof value === "string");
+  // Empty updates must actually clear the content; every string includes "".
+  return candidates.some((candidate) =>
+    expectedText === "" ? stripHtml(candidate) === "" : stripHtml(candidate).includes(expectedText),
+  );
+}
+
+function validateDescriptionInput(opts: { description?: string; descriptionHtml?: string }): void {
+  if (opts.description !== undefined && opts.descriptionHtml !== undefined) {
+    throw new ValidationError("--description and --description-html are mutually exclusive.");
+  }
 }
 
 function arrayContainsAll(actual: unknown, expected: unknown): boolean {
@@ -417,6 +426,7 @@ export function createIssueCommand(): Command {
     )
     .option("--title <title>", "Issue title")
     .option("--description <description>", "Issue description")
+    .option("--description-html <html>", "Raw HTML description (exclusive with --description)")
     .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
     .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
     .option("--label <name>", "Label name (case-insensitive, repeatable)", collect, [])
@@ -438,6 +448,7 @@ export function createIssueCommand(): Command {
         project?: string;
         title?: string;
         description?: string;
+        descriptionHtml?: string;
         priority?: string;
         assignee: string[];
         label: string[];
@@ -450,6 +461,7 @@ export function createIssueCommand(): Command {
         json?: boolean;
       }) => {
         try {
+          validateDescriptionInput(opts);
           const config = loadConfig();
           const client = createClient(config);
           const ws = opts.workspace ?? requireActiveWorkspace(config);
@@ -473,10 +485,14 @@ export function createIssueCommand(): Command {
             throw new ValidationError("Title is required.");
           }
 
-          const description = opts.description ?? (await ask("Description (optional)", ""));
+          const description =
+            opts.descriptionHtml !== undefined
+              ? undefined
+              : (opts.description ?? (await ask("Description (optional)", "")));
 
           const body: Record<string, unknown> = { name: title };
-          if (description) body.description_html = `<p>${description}</p>`;
+          if (opts.descriptionHtml !== undefined) body.description_html = opts.descriptionHtml;
+          else if (description) body.description_html = `<p>${description}</p>`;
           if (opts.priority) body.priority = opts.priority;
           if (opts.due) body.target_date = opts.due;
           if (opts.start) body.start_date = opts.start;
@@ -627,6 +643,7 @@ export function createIssueCommand(): Command {
     .option("--title <title>", "New title")
     .option("--name <name>", "New title (alias for --title)")
     .option("--description <description>", "New description")
+    .option("--description-html <html>", "Raw HTML description (exclusive with --description)")
     .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
     .option("--state <state>", "State name or ID")
     .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
@@ -644,7 +661,7 @@ export function createIssueCommand(): Command {
     )
     .option(
       "--parent <ref>",
-      "Parent issue ref (sequence number, PROJ-42, or UUID) — single-issue only",
+      "Parent issue ref (sequence number, PROJ-42, or UUID; 'none' to clear) — single-issue only",
     )
     .option("--due <YYYY-MM-DD>", "Due date (use 'none' to clear)")
     .option("--start <YYYY-MM-DD>", "Start date (use 'none' to clear)")
@@ -658,6 +675,7 @@ export function createIssueCommand(): Command {
           title?: string;
           name?: string;
           description?: string;
+          descriptionHtml?: string;
           priority?: string;
           state?: string;
           assignee: string[];
@@ -670,6 +688,7 @@ export function createIssueCommand(): Command {
         },
       ) => {
         try {
+          validateDescriptionInput(opts);
           const config = loadConfig();
           const client = createClient(config);
           const ws = opts.workspace ?? requireActiveWorkspace(config);
@@ -710,7 +729,9 @@ export function createIssueCommand(): Command {
           const baseBody: Record<string, unknown> = {};
           const titleValue = opts.title ?? opts.name;
           if (titleValue) baseBody.name = titleValue;
-          if (opts.description) baseBody.description_html = `<p>${opts.description}</p>`;
+          if (opts.descriptionHtml !== undefined) baseBody.description_html = opts.descriptionHtml;
+          else if (opts.description !== undefined)
+            baseBody.description_html = `<p>${opts.description}</p>`;
           if (opts.priority) baseBody.priority = opts.priority;
           if (opts.due) baseBody.target_date = opts.due === "none" ? null : opts.due;
           if (opts.start) baseBody.start_date = opts.start === "none" ? null : opts.start;
@@ -766,7 +787,9 @@ export function createIssueCommand(): Command {
           }
 
           // Resolve parent (single-issue only)
-          if (opts.parent) {
+          if (opts.parent === "none") {
+            baseBody.parent = null;
+          } else if (opts.parent) {
             const { issueId: parentId } = await resolveIssueRef(
               client,
               ws,
@@ -785,7 +808,7 @@ export function createIssueCommand(): Command {
             opts.labelId.length === 0
           ) {
             throw new ValidationError(
-              "Nothing to update. Use --title (or --name), --description, --priority, --state, --assignee, --label, --label-id, --parent, --due, or --start.",
+              "Nothing to update. Use --title (or --name), --description, --description-html, --priority, --state, --assignee, --label, --label-id, --parent, --due, or --start.",
             );
           }
 

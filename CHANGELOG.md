@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.6
+
+Fixes the rewrite workflow gaps reported on 2026-10-20.
+
+### Bug fixes
+
+- **Raw HTML input:** `issue create/update --description-html <html>` and `page create/update --content-html <html>` send HTML unchanged, preserving headings and lists without an extra paragraph wrapper. Text and HTML flags are mutually exclusive, including empty values. Updates accept empty text or HTML to clear content; issue round-trip verification now rejects a clear that the API silently ignored.
+- **Clear issue parents:** `issue update <ref> --parent none` sends `parent: null` without resolving `none` as an issue. Assigning parents still works, returned parent values are checked, and bulk parent updates remain unsupported.
+- **Page update method:** uses `PUT` by default, matching the [current API reference](https://developers.plane.so/api-reference/page/update-project-page). The documented endpoint accepts `name`, `description_html`, or both; content replaces the page body, and omitted fields are not sent. `--method PATCH` retains compatibility with instances that expose PATCH. Dry-run shows the selected method, and there is no automatic fallback between methods.
+- **Endpoint diagnostics:** page update/delete errors report the actual method, path, and HTTP status rather than claiming all editions lack these operations. Help text and README reflect instance/version differences. Discovery retains its conservative baseline operation list; a list probe cannot establish update/delete support.
+- **Project UUID references:** `project use <uuid>` and `--project <uuid>` resolve IDs copied from browser URLs while preserving identifier/name matching.
+
+### Included since the previous published release (v0.4.4)
+
+The v0.4.5 changes below were implemented locally but were not published separately. They are included in v0.4.6: page archive/unarchive, required HTML in page creation, `--access`, and discovery's baseline page operations. The earlier universal update/delete limitation described under v0.4.5 is superseded by this release's documented PUT support and endpoint-specific diagnostics.
+
+### Validation
+
+- **Validation:** 167 tests passed; 7 opt-in live tests skipped. Build, lint, formatting, and package install/smoke verification passed (installed version `0.4.6`). Regression tests cover outgoing HTML, empty updates, parent assignment/clearing, method selection, dry-run, errors, and no cross-method fallback. Live page PUT verification on the reporting instance remains pending; its version and endpoint were not supplied.
+
+## 0.4.5 (included in 0.4.6)
+
+Makes the `page` command surface work against Plane's commercial API (Plane Cloud, Commercial/Airgapped Editions), which serves project pages on the token-authenticated `/api/v1` API, and makes the CLI honest about the two operations no edition's public API exposes (update/delete — [makeplane/plane#8598](https://github.com/makeplane/plane/issues/8598)). Community self-hosted instances keep the existing 404 behavior: they don't ship the endpoint at all. See [pages-support-root-cause.md](context/research/lessons-learned/pages-support-root-cause.md) (2026-10-09 addendum). Implemented against the documented API shapes with mocked-transport unit tests; live verification against a Cloud/Commercial instance is pending.
+
+### Features
+- **`plane page archive <page>` / `plane page unarchive <page>`** — the documented page lifecycle operations (`POST`/`DELETE …/pages/{id}/archive/`, 204 No Content responses; bodyless POST via a new internal `postVoid` client verb). Accepts name or UUID like `get` does, supports `--dry-run` and `--json` (success envelope `{ success, action, pageId, projectId, workspace }`), and is the supported alternative to delete.
+- **`page create` commercial-correct body** — the documented create endpoint requires `description_html`, so it is always sent (default `<p></p>` when no `--content`); a contentless create is no longer a 400 against commercial instances. New `--access <0|1>` option (0 = public, default; 1 = private), validated before any network call.
+
+### Error Messages
+- **`page update` / `page delete` report the real limitation** — a 404/405 on those routes now wraps into a message stating that Plane's public API does not expose page update/delete on any edition, pointing at `plane page archive` and upstream issue #8598, instead of a misleading "page not found". The request is still attempted first, so an instance running a Plane version that merges the upstream PRs (#8669/#8865/#9528) keeps working with zero CLI changes; other statuses propagate untouched. `--help` descriptions updated to match.
+
+### Polish
+- **`capabilities.pages` reports the operation level** — when the pages probe succeeds, `discover context`/`issue-inputs` include `operations: ["list", "get", "create", "archive"]` (static per the documented public API; `archive` covers both directions of the archive/unarchive sub-endpoint); unsupported/unknown keeps `{ supported, reason }` plus `operations: []` for schema stability.
+
+### Testing
+- New `tests/commands/page.test.ts` (archive/unarchive dry-run previews, 204 success envelopes, 404 wrap; create body defaults and `--access` validation; update/delete 404/405 wraps and passthrough of other statuses). `discover.test.ts` extended for the `operations` array.
+
 ## 0.4.4
 
 Closes the two verification items left open by v0.4.3 (both implemented offline against documented field names, never confirmed live) plus one agent-facing discovery nicety. See [pages-support-root-cause.md](context/research/lessons-learned/pages-support-root-cause.md) and [production-use-gap-report.md](context/research/lessons-learned/production-use-gap-report.md).

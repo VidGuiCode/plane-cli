@@ -219,6 +219,24 @@ export class PlaneApiClient {
     return res.json() as Promise<T>;
   }
 
+  /**
+   * POST that expects no response body — Plane answers `204 No Content` for
+   * some action endpoints (e.g. page archive), which `post()` cannot parse.
+   */
+  async postVoid(path: string, body?: unknown): Promise<void> {
+    const res = await this.fetchWithRetry(path, {
+      method: "POST",
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new PlaneApiError(res.status, errorText, "POST", path, {
+        request: body,
+        response: errorText,
+      });
+    }
+  }
+
   async patch<T>(path: string, body: unknown): Promise<T> {
     const res = await this.fetchWithRetry(path, {
       method: "PATCH",
@@ -242,6 +260,21 @@ export class PlaneApiClient {
       const errorText = await res.text();
       throw new PlaneApiError(res.status, errorText, "DELETE", path, { response: errorText });
     }
+  }
+
+  async put<T>(path: string, body: unknown): Promise<T> {
+    const res = await this.fetchWithRetry(path, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new PlaneApiError(res.status, errorText, "PUT", path, {
+        request: body,
+        response: errorText,
+      });
+    }
+    return res.json() as Promise<T>;
   }
 }
 

@@ -32,8 +32,14 @@ export declare class PlaneApiClient {
     private fetchWithRetry;
     get<T>(path: string): Promise<T>;
     post<T>(path: string, body: unknown): Promise<T>;
+    /**
+     * POST that expects no response body — Plane answers `204 No Content` for
+     * some action endpoints (e.g. page archive), which `post()` cannot parse.
+     */
+    postVoid(path: string, body?: unknown): Promise<void>;
     patch<T>(path: string, body: unknown): Promise<T>;
     delete(path: string): Promise<void>;
+    put<T>(path: string, body: unknown): Promise<T>;
 }
 export declare function fetchAll<T>(client: PlaneApiClient, path: string): Promise<T[]>;
 export declare function unwrap<T>(res: T[] | {

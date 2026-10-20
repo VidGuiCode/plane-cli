@@ -20,8 +20,32 @@ function pageListPath(workspace: string, projectId: string): string {
 
 function pageUnsupportedError(error: PlaneApiError): ValidationError {
   return new ValidationError(
-    `Project pages endpoint returned 404. This Plane instance/API version may not support project pages. Original error: ${error.message}`,
+    `Project pages endpoint returned ${error.status}. This Plane instance/API version may not support project pages. Original error: ${error.message}`,
   );
+}
+
+/** Describe the observed endpoint failure without assuming all editions match. */
+function pageMutationUnsupportedError(
+  error: PlaneApiError,
+  verb: "update" | "delete",
+): ValidationError {
+  const reason =
+    error.status === 405
+      ? `${error.method} is not allowed by this endpoint`
+      : "the page or project-pages endpoint was not found";
+  return new ValidationError(
+    `Page ${verb} failed (${error.method} ${error.path}, HTTP ${error.status}): ${reason}. Check the page ID, project, permissions, and this instance's API version. ${
+      verb === "update"
+        ? "The current documented API uses PUT; use --method PATCH only for an instance that supports PATCH."
+        : "If deletion is unavailable, try: plane page archive <ref>."
+    } Original error: ${error.message}`,
+  );
+}
+
+function validateContentInput(opts: { content?: string; contentHtml?: string }): void {
+  if (opts.content !== undefined && opts.contentHtml !== undefined) {
+    throw new ValidationError("--content and --content-html are mutually exclusive.");
+  }
 }
 
 async function fetchProjectPages(
@@ -78,6 +102,34 @@ async function resolvePage(
   throw new ValidationError(
     `Page "${pageRef}" not found in this project. Check with: plane page list`,
   );
+}
+
+/**
+ * Archive/unarchive a page via the documented lifecycle endpoint
+ * (`POST`/`DELETE …/pages/{id}/archive/`). The API returns 204 No Content, so
+ * nothing comes back. A 404/405 on this call means the instance has no pages
+ * API (Community self-hosted) — same wrap as the list path.
+ */
+async function setPageArchived(
+  client: PlaneApiClient,
+  workspace: string,
+  projectId: string,
+  pageId: string,
+  archived: boolean,
+): Promise<void> {
+  const path = `${pageListPath(workspace, projectId)}${pageId}/archive/`;
+  try {
+    if (archived) {
+      await client.postVoid(path);
+    } else {
+      await client.delete(path);
+    }
+  } catch (error) {
+    if (error instanceof PlaneApiError && (error.status === 404 || error.status === 405)) {
+      throw pageUnsupportedError(error);
+    }
+    throw error;
+  }
 }
 
 export function createPageCommand(): Command {
@@ -244,6 +296,8 @@ export function createPageCommand(): Command {
     .command("create <name>")
     .description("Create a new page in the active (or specified) project")
     .option("--content <text>", "Page content (optional)")
+    .option("--content-html <html>", "Raw HTML content (exclusive with --content)")
+    .option("--access <0|1>", "Page access: 0 = public (default), 1 = private")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
       "--project <identifier-or-name>",
@@ -253,9 +307,25 @@ export function createPageCommand(): Command {
     .action(
       async (
         name: string,
-        opts: { content?: string; workspace?: string; project?: string; json?: boolean },
+        opts: {
+          content?: string;
+          contentHtml?: string;
+          access?: string;
+          workspace?: string;
+          project?: string;
+          json?: boolean;
+        },
       ) => {
         try {
+          validateContentInput(opts);
+          let access: number | undefined;
+          if (opts.access !== undefined) {
+            if (opts.access !== "0" && opts.access !== "1") {
+              throw new ValidationError("--access must be 0 (public) or 1 (private).");
+            }
+            access = Number(opts.access);
+          }
+
           const config = loadConfig();
           const client = createClient(config);
           const ws = opts.workspace ?? requireActiveWorkspace(config);
@@ -268,10 +338,18 @@ export function createPageCommand(): Command {
             projectId = requireActiveProject(config).id;
           }
 
-          const content = opts.content ?? (await ask("Content", ""));
-          const body: { name: string; description_html?: string } = { name };
-          if (content) {
-            body.description_html = `<p>${content}</p>`;
+          const content =
+            opts.contentHtml !== undefined
+              ? undefined
+              : (opts.content ?? (await ask("Content", "")));
+          // The documented commercial create endpoint requires description_html
+          // even for a contentless page.
+          const body: { name: string; description_html: string; access?: number } = {
+            name,
+            description_html: opts.contentHtml ?? (content ? `<p>${content}</p>` : "<p></p>"),
+          };
+          if (access !== undefined) {
+            body.access = access;
           }
 
           const path = `workspaces/${ws}/projects/${projectId}/pages/`;
@@ -302,9 +380,11 @@ export function createPageCommand(): Command {
 
   command
     .command("update <pageId>")
-    .description("Update a page by ID")
+    .description("Update a page by ID (PUT by default; requires this instance's pages API)")
     .option("--name <new_name>", "New name")
     .option("--content <text>", "New content")
+    .option("--content-html <html>", "Raw HTML content (exclusive with --content)")
+    .option("--method <PUT|PATCH>", "Update method (no automatic fallback)", "PUT")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
       "--project <identifier-or-name>",
@@ -317,12 +397,28 @@ export function createPageCommand(): Command {
         opts: {
           name?: string;
           content?: string;
+          contentHtml?: string;
+          method: string;
           workspace?: string;
           project?: string;
           json?: boolean;
         },
       ) => {
         try {
+          validateContentInput(opts);
+          const method = opts.method.toUpperCase();
+          if (method !== "PUT" && method !== "PATCH") {
+            throw new ValidationError("--method must be PUT or PATCH.");
+          }
+          if (
+            opts.name === undefined &&
+            opts.content === undefined &&
+            opts.contentHtml === undefined
+          ) {
+            throw new ValidationError(
+              "At least one of --name, --content, or --content-html must be provided.",
+            );
+          }
           const config = loadConfig();
           const client = createClient(config);
           const ws = opts.workspace ?? requireActiveWorkspace(config);
@@ -335,15 +431,13 @@ export function createPageCommand(): Command {
             projectId = requireActiveProject(config).id;
           }
 
-          if (!opts.name && !opts.content) {
-            throw new ValidationError("At least one of --name or --content must be provided.");
-          }
-
           const body: { name?: string; description_html?: string } = {};
-          if (opts.name) {
+          if (opts.name !== undefined) {
             body.name = opts.name;
           }
-          if (opts.content) {
+          if (opts.contentHtml !== undefined) {
+            body.description_html = opts.contentHtml;
+          } else if (opts.content !== undefined) {
             body.description_html = `<p>${opts.content}</p>`;
           }
 
@@ -351,7 +445,7 @@ export function createPageCommand(): Command {
           if (isDryRunEnabled()) {
             printJson({
               dryRun: true,
-              method: "PATCH",
+              method,
               path,
               body,
               context: { workspace: ws, projectId, pageId },
@@ -359,7 +453,18 @@ export function createPageCommand(): Command {
             return;
           }
 
-          const page = await client.patch<PlanePage>(path, body);
+          let page: PlanePage;
+          try {
+            page =
+              method === "PUT"
+                ? await client.put<PlanePage>(path, body)
+                : await client.patch<PlanePage>(path, body);
+          } catch (err) {
+            if (err instanceof PlaneApiError && (err.status === 404 || err.status === 405)) {
+              throw pageMutationUnsupportedError(err, "update");
+            }
+            throw err;
+          }
           if (opts.json) {
             printJson(page);
             return;
@@ -375,7 +480,9 @@ export function createPageCommand(): Command {
 
   command
     .command("delete <pageId>")
-    .description("Delete a page by ID")
+    .description(
+      "Delete a page by ID (requires this instance's pages API; use `plane page archive` to retire a page)",
+    )
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
       "--project <identifier-or-name>",
@@ -408,7 +515,14 @@ export function createPageCommand(): Command {
             return;
           }
 
-          await client.delete(path);
+          try {
+            await client.delete(path);
+          } catch (err) {
+            if (err instanceof PlaneApiError && (err.status === 404 || err.status === 405)) {
+              throw pageMutationUnsupportedError(err, "delete");
+            }
+            throw err;
+          }
           if (opts.json) {
             printJson({ success: true, action: "page.delete", pageId, projectId, workspace: ws });
             return;
@@ -419,6 +533,71 @@ export function createPageCommand(): Command {
         }
       },
     );
+
+  // ── archive / unarchive ────────────────────────────────────────────────────
+
+  for (const [verb, archived, method] of [
+    ["archive", true, "POST"],
+    ["unarchive", false, "DELETE"],
+  ] as const) {
+    command
+      .command(`${verb} <page>`)
+      .description(
+        archived
+          ? "Archive a page by ID or exact name"
+          : "Restore an archived page by ID or exact name",
+      )
+      .option("--workspace <slug>", "Workspace slug (overrides active context)")
+      .option(
+        "--project <identifier-or-name>",
+        "Project identifier or name (overrides active context)",
+      )
+      .option("--json", "Output raw JSON")
+      .action(
+        async (pageRef: string, opts: { workspace?: string; project?: string; json?: boolean }) => {
+          try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
+
+            let projectId: string;
+            if (opts.project) {
+              const proj = await resolveProject(client, ws, opts.project);
+              projectId = proj.id;
+            } else {
+              projectId = requireActiveProject(config).id;
+            }
+
+            const page = await resolvePage(client, ws, projectId, pageRef);
+            const path = `workspaces/${ws}/projects/${projectId}/pages/${page.id}/archive/`;
+            if (isDryRunEnabled()) {
+              printJson({
+                dryRun: true,
+                method,
+                path,
+                context: { workspace: ws, projectId, pageId: page.id },
+              });
+              return;
+            }
+
+            await setPageArchived(client, ws, projectId, page.id, archived);
+            if (opts.json) {
+              printJson({
+                success: true,
+                action: `page.${verb}`,
+                pageId: page.id,
+                projectId,
+                workspace: ws,
+              });
+              return;
+            }
+            printInfo(`Page "${page.name}" ${verb}d.`);
+          } catch (err) {
+            exitWithError(err, Boolean(opts.json));
+          }
+        },
+      );
+  }
 
   return command;
 }

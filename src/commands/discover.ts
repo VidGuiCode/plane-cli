@@ -55,7 +55,7 @@ export function createDiscoverCommand(): Command {
 
         const pages: PagesCapability = project
           ? await probePagesSupport(client, workspace, project.projectId)
-          : { supported: null, reason: "no project in context to probe" };
+          : { supported: null, reason: "no project in context to probe", operations: [] };
 
         printJson({
           schemaVersion: 1,

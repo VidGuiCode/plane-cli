@@ -3,6 +3,7 @@ import {
   parseIssueRef,
   normalizeIssue,
   resolveIssueRef,
+  resolveProject,
   getMemberRole,
   findUnknownFields,
 } from "../../src/core/resolvers.js";
@@ -169,6 +170,51 @@ describe("resolveIssueRef with duplicate sequence_id", () => {
 
     expect(result.issueId).toBe("uuid-only");
     expect(result.sequenceId).toBe(141);
+  });
+});
+
+describe("resolveProject", () => {
+  const PROJECT_UUID = "beff0626-6b95-4c46-a591-d63de364ca19";
+
+  function mockProjects(): void {
+    globalThis.fetch = vi.fn(async () => {
+      const body = {
+        results: [{ id: PROJECT_UUID, identifier: "MEETING", name: "Team Meetings" }],
+      };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+  }
+
+  it("resolves a project by its UUID id (copied from a browser URL)", async () => {
+    mockProjects();
+    const result = await resolveProject(makeClient(), "workspace", PROJECT_UUID);
+    expect(result).toEqual({
+      id: PROJECT_UUID,
+      identifier: "MEETING",
+      name: "Team Meetings",
+    });
+  });
+
+  it("still resolves by identifier", async () => {
+    mockProjects();
+    const result = await resolveProject(makeClient(), "workspace", "meeting");
+    expect(result.id).toBe(PROJECT_UUID);
+  });
+
+  it("still resolves by name", async () => {
+    mockProjects();
+    const result = await resolveProject(makeClient(), "workspace", "Team Meetings");
+    expect(result.id).toBe(PROJECT_UUID);
+  });
+
+  it("throws the not-found error for a garbage ref", async () => {
+    mockProjects();
+    await expect(resolveProject(makeClient(), "workspace", "nope")).rejects.toThrow(
+      'Project "nope" not found in workspace "workspace". Run: plane project list',
+    );
   });
 });
 

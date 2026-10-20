@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { unwrap, PlaneApiClient, PlaneApiError } from "../../src/core/api-client.js";
 
 describe("unwrap", () => {
@@ -148,6 +148,36 @@ describe("PlaneApiError", () => {
 });
 
 describe("PlaneApiClient", () => {
+  it("PUT preserves request/response metadata on API rejection", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('{"error":"locked"}', { status: 400 }));
+    try {
+      const client = new PlaneApiClient({
+        baseUrl: "https://plane.example.test",
+        token: "test-token",
+        apiStyle: "issues",
+      });
+      const body = { description_html: "<h2>New</h2>" };
+      await expect(client.put("pages/page-id/", body)).rejects.toMatchObject({
+        status: 400,
+        method: "PUT",
+        path: "pages/page-id/",
+        details: { request: body, response: '{"error":"locked"}' },
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "https://plane.example.test/api/v1/pages/page-id/",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify(body),
+          headers: expect.objectContaining({ "X-API-Key": "test-token" }),
+        }),
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
   it("should create client with options", () => {
     const client = new PlaneApiClient({
       baseUrl: "https://api.example.com",

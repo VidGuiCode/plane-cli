@@ -85,10 +85,13 @@ describe("discover pages capability", () => {
     await createDiscoverCommand().parseAsync(["issue-inputs"], { from: "user" });
 
     const payload = JSON.parse(log.mock.calls[0][0] as string) as {
-      capabilities: { pages: { supported: boolean | null; reason: string | null } };
+      capabilities: {
+        pages: { supported: boolean | null; reason: string | null; operations: string[] };
+      };
     };
     expect(payload.capabilities.pages.supported).toBe(false);
     expect(payload.capabilities.pages.reason).toContain("404");
+    expect(payload.capabilities.pages.operations).toEqual([]);
   });
 
   it("issue-inputs reports pages supported=true when the endpoint answers", async () => {
@@ -100,9 +103,14 @@ describe("discover pages capability", () => {
     await createDiscoverCommand().parseAsync(["issue-inputs"], { from: "user" });
 
     const payload = JSON.parse(log.mock.calls[0][0] as string) as {
-      capabilities: { pages: { supported: boolean | null } };
+      capabilities: {
+        pages: { supported: boolean | null; reason: string | null; operations: string[] };
+      };
     };
     expect(payload.capabilities.pages.supported).toBe(true);
+    expect(payload.capabilities.pages.reason).toBeNull();
+    // Static per the documented public API — update/delete are on no edition.
+    expect(payload.capabilities.pages.operations).toEqual(["list", "get", "create", "archive"]);
   });
 
   it("a probe error never crashes discover and yields supported=null", async () => {
@@ -117,9 +125,10 @@ describe("discover pages capability", () => {
 
     expect(log).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(log.mock.calls[0][0] as string) as {
-      capabilities: { pages: { supported: boolean | null } };
+      capabilities: { pages: { supported: boolean | null; operations: string[] } };
     };
     expect(payload.capabilities.pages.supported).toBeNull();
+    expect(payload.capabilities.pages.operations).toEqual([]);
   });
 
   it("context includes the pages capability when a project is in context", async () => {
@@ -132,9 +141,10 @@ describe("discover pages capability", () => {
 
     const payload = JSON.parse(log.mock.calls[0][0] as string) as {
       kind: string;
-      capabilities: { pages: { supported: boolean | null } };
+      capabilities: { pages: { supported: boolean | null; operations: string[] } };
     };
     expect(payload.kind).toBe("context");
     expect(payload.capabilities.pages.supported).toBe(false);
+    expect(payload.capabilities.pages.operations).toEqual([]);
   });
 });

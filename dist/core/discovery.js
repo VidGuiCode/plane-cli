@@ -28,6 +28,12 @@ export async function fetchMembers(client, workspace) {
     return fetchAll(client, `workspaces/${workspace}/members/`);
 }
 /**
+ * Baseline operations for the project-pages API. Update/delete support varies
+ * with instance version and is not established by the list probe, so they are
+ * conservatively omitted. `archive` covers archive and unarchive.
+ */
+const PAGE_OPERATIONS = ["list", "get", "create", "archive"];
+/**
  * Non-fatal probe: can this instance serve project Pages over the
  * token-authenticated `/api/v1/.../pages/` endpoint? Mirrors how
  * `fetchProjectPages` treats a 404 as "unsupported", but NEVER throws — a probe
@@ -39,18 +45,20 @@ export async function probePagesSupport(client, workspace, projectId) {
     try {
         // per_page=1 keeps the probe cheap; we only care about the status code.
         await client.get(`workspaces/${workspace}/projects/${projectId}/pages/?per_page=1`);
-        return { supported: true, reason: null };
+        return { supported: true, reason: null, operations: PAGE_OPERATIONS };
     }
     catch (error) {
         if (error instanceof PlaneApiError && error.status === 404) {
             return {
                 supported: false,
                 reason: "project-pages endpoint returned 404 (Pages not on this instance's public API)",
+                operations: [],
             };
         }
         return {
             supported: null,
             reason: `pages probe failed: ${error instanceof Error ? error.message : String(error)}`,
+            operations: [],
         };
     }
 }

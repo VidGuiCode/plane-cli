@@ -28,7 +28,7 @@ export function createDiscoverCommand() {
             const user = await client.get("users/me/");
             const pages = project
                 ? await probePagesSupport(client, workspace, project.projectId)
-                : { supported: null, reason: "no project in context to probe" };
+                : { supported: null, reason: "no project in context to probe", operations: [] };
             printJson({
                 schemaVersion: 1,
                 kind: "context",

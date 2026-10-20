@@ -72,14 +72,24 @@ export async function fetchMembers(
 }
 
 /**
+ * Baseline operations for the project-pages API. Update/delete support varies
+ * with instance version and is not established by the list probe, so they are
+ * conservatively omitted. `archive` covers archive and unarchive.
+ */
+const PAGE_OPERATIONS: readonly string[] = ["list", "get", "create", "archive"];
+
+/**
  * Capability flag for Plane Pages on the current instance.
  * - `supported: true`  — the token-authenticated project-pages endpoint answered.
  * - `supported: false` — it returned 404 (Pages are not on the public API here).
  * - `supported: null`  — could not be determined (probe error, or no project to probe).
+ * `operations` is non-null for schema stability: the documented operation list
+ * when supported, `[]` otherwise.
  */
 export interface PagesCapability {
   supported: boolean | null;
   reason: string | null;
+  operations: readonly string[];
 }
 
 /**
@@ -98,17 +108,19 @@ export async function probePagesSupport(
   try {
     // per_page=1 keeps the probe cheap; we only care about the status code.
     await client.get(`workspaces/${workspace}/projects/${projectId}/pages/?per_page=1`);
-    return { supported: true, reason: null };
+    return { supported: true, reason: null, operations: PAGE_OPERATIONS };
   } catch (error) {
     if (error instanceof PlaneApiError && error.status === 404) {
       return {
         supported: false,
         reason: "project-pages endpoint returned 404 (Pages not on this instance's public API)",
+        operations: [],
       };
     }
     return {
       supported: null,
       reason: `pages probe failed: ${error instanceof Error ? error.message : String(error)}`,
+      operations: [],
     };
   }
 }

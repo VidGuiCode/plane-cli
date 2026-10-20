@@ -5,6 +5,7 @@ import { printInfo, printTable, printJson } from "../core/output.js";
 import { exitWithError, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled, isNonInteractiveMode } from "../core/runtime.js";
 import { ask } from "../core/prompt.js";
+import { UUID_RE } from "../core/resolvers.js";
 export function createProjectCommand() {
     const command = new Command("project")
         .description("Work with Plane projects")
@@ -52,8 +53,10 @@ export function createProjectCommand() {
             const ws = requireActiveWorkspace(config);
             const res = await client.get(`workspaces/${ws}/projects/`);
             const projects = unwrap(res);
-            const match = projects.find((p) => p.identifier.toLowerCase() === project.toLowerCase() ||
-                p.name.toLowerCase() === project.toLowerCase());
+            // Accept a UUID copied from a browser URL as well as identifier/name.
+            const ref = project.toLowerCase();
+            const match = (UUID_RE.test(project) && projects.find((p) => p.id.toLowerCase() === ref)) ||
+                projects.find((p) => p.identifier.toLowerCase() === ref || p.name.toLowerCase() === ref);
             if (!match) {
                 throw new ValidationError(`Project "${project}" not found. Run: plane project list`);
             }

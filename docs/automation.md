@@ -18,6 +18,7 @@ plane issue create --project PROJ --title "Fix login bug" --no-interactive --jso
 | Flag | Script behavior |
 | --- | --- |
 | `--no-interactive` | Fail when required input needs a prompt. The CLI also detects non-TTY input or output. |
+| `--no-resolver-cache` | Resolve project, state, member, and label names directly against Plane for this command. |
 | `--dry-run` | Resolve inputs and preview writes on commands that support it. Preview fields vary by command and can include `method`, `path`, `body`, and `context`. |
 | `--json` | Request JSON on commands that expose this option. Structured command errors go to stderr. |
 | `--compact` | Remove indentation from JSON output. |

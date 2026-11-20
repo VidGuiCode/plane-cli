@@ -114,9 +114,10 @@ export function readIssueUpdateBatch(source: string): BatchEntry[] {
   });
 }
 
-function cacheBatchReads(client: PlaneReadClient): PlaneReadClient {
+function cacheBatchReads(client: PlaneApiClient): PlaneReadClient {
   const reads = new Map<string, Promise<unknown>>();
   return {
+    resolveLookup: client.resolverCache ? client.resolveLookup.bind(client) : undefined,
     get<T>(path: string): Promise<T> {
       let read = reads.get(path);
       if (!read) {

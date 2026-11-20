@@ -1,7 +1,9 @@
+import type { ResolverCache } from "./resolver-cache.js";
 export interface PlaneClientOptions {
     baseUrl: string;
     token: string;
     apiStyle: "issues" | "work-items";
+    resolverCache?: ResolverCache;
     retries?: number;
     retryDelay?: number;
 }
@@ -23,6 +25,8 @@ export declare class PlaneApiClient {
     constructor(options: PlaneClientOptions);
     get baseUrl(): string;
     get token(): string;
+    get resolverCache(): ResolverCache | undefined;
+    resolveLookup<T, R>(path: string, select: (rows: T[]) => R | undefined): Promise<R | undefined>;
     issuesSegment(): string;
     private get headers();
     private url;
@@ -41,7 +45,8 @@ export declare class PlaneApiClient {
     delete(path: string): Promise<void>;
     put<T>(path: string, body: unknown): Promise<T>;
 }
-export type PlaneReadClient = Pick<PlaneApiClient, "get">;
+export type PlaneReadClient = Pick<PlaneApiClient, "get"> & Partial<Pick<PlaneApiClient, "resolveLookup">>;
+export declare function findInResolverList<T, R>(client: PlaneReadClient, path: string, select: (rows: T[]) => R | undefined): Promise<R | undefined>;
 export declare function fetchAll<T>(client: PlaneReadClient, path: string): Promise<T[]>;
 export declare function unwrap<T>(res: T[] | {
     results: T[];

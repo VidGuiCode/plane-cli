@@ -37,6 +37,7 @@ program
     .option("--dry-run", "Resolve and validate a mutating command without sending it")
     .option("--no-interactive", "Fail instead of prompting for missing input")
     .option("--compact", "Output compact JSON without indentation (for AI/agents)")
+    .option("--no-resolver-cache", "Resolve project, state, member, and label names from Plane")
     .version(pkg.version)
     .helpCommand(true) // Commander.js v13: action() suppresses implicit help command; re-enable it
     .action(async () => {

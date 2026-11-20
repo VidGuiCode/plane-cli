@@ -26,3 +26,11 @@ Plane CLI runs locally and communicates with a Plane instance over its public RE
 For commands that support workspace overrides, `--workspace` takes precedence over `PLANE_WORKSPACE` and then the saved workspace. Project-scoped commands that expose `--project` use it to override the saved project. A project-qualified issue ref can identify a project as part of the issue lookup.
 
 An account stores the detected or explicitly selected issue API style (`issues` or `work-items`). Environment-only authentication uses `PLANE_API_STYLE` and defaults to `issues`. Project-page support is checked independently because it varies by edition and API version.
+
+## Resolver cache
+
+Saved accounts reuse project, state, member, and label lookup lists for 60 seconds. Workspace paths scope project and member lists. Project paths scope state and label lists. A hash of the effective instance URL, token, and lookup path isolates accounts without storing tokens in cache files. Files live in `resolver-cache` next to the active config file, including when `PLANE_CONFIG` overrides its location. Cached member metadata can include email addresses.
+
+A lookup miss refreshes the list once. An API 404 invalidates lookups for the affected workspace and project, and a successful write to a lookup resource invalidates its list. Existing write requests keep their normal error handling. Cache files are replaced atomically, and failed cache reads or writes fall back to API behavior. Explicit list and discovery data reads stay live.
+
+Use `--no-resolver-cache` to bypass the cache for a command. Environment-only authentication leaves the disk cache disabled.

@@ -2,18 +2,21 @@
 
 ```text
     ██████████
-    ██████████
-████    ██████
-████    ██████
+    ██████████   Unofficial CLI for Plane
+████    ██████   Cloud and self-hosted
+████    ██████   Windows, macOS, Linux
     ████
     ████
 ```
 
-**Manage Plane work from your terminal.** List your assigned issues, update work in bulk, and automate project workflows on Plane Cloud or a self-hosted instance.
+[![Latest release](https://img.shields.io/github/v/release/VidGuiCode/plane-cli?label=release&color=2563eb)](https://github.com/VidGuiCode/plane-cli/releases/latest)
+[![CI status on main](https://img.shields.io/github/actions/workflow/status/VidGuiCode/plane-cli/ci.yml?branch=main&label=CI&logo=github)](https://github.com/VidGuiCode/plane-cli/actions/workflows/ci.yml?query=branch%3Amain)
+[![Requires Node.js 20 or later](https://img.shields.io/badge/Node.js-20%2B-43853d?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![MIT license](https://img.shields.io/badge/license-MIT-64748b)](LICENSE)
+
+**Manage Plane work from your terminal.** List your assigned issues, update work in bulk, and automate project workflows.
 
 [Quick start](#quick-start) · [Commands](docs/commands.md) · [Automation](docs/automation.md) · [Roadmap](docs/roadmap.md)
-
-**Node.js 20+** · **Windows, macOS, Linux** · **Unofficial**
 
 ## Install
 

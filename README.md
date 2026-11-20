@@ -23,7 +23,7 @@
 Install the `plane` command from a [GitHub release](https://github.com/VidGuiCode/plane-cli/releases).
 
 ```bash
-npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.5.1/plane-cli-0.5.1.tgz
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.6.0/plane-cli-0.6.0.tgz
 plane --version
 ```
 
@@ -51,6 +51,7 @@ The CLI saves your active account, workspace, and project for future commands. U
 | See the active cycle and its issues | `plane cycle current` |
 | Find a project page | `plane page search "Release plan"` |
 | Get issue data as JSON | `plane issue list --json --fields identifier,title,state` |
+| Validate a bulk issue import | `plane issue bulk-create --file issues.yaml --validate-only` |
 | Preview a batch of issue updates | `plane issue update --from-json updates.json --dry-run` |
 
 Run `plane <command> --help` for options. For batch input examples, CI configuration, and coding agent workflows, see the [automation guide](docs/automation.md).

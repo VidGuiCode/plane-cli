@@ -1,4 +1,4 @@
-import type { PlaneApiClient } from "./api-client.js";
+import { type PlaneApiClient } from "./api-client.js";
 import { type IssueUpdateFields } from "./issue-update.js";
 type BatchEntry = IssueUpdateFields & {
     issue: string;

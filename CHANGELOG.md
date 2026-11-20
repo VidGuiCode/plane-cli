@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Create issues in bulk from JSON or YAML, with read-only validation and dry-run previews.
+- Create or skip missing named labels during single issue creation and bulk import.
+- Read issue descriptions from UTF-8 files or stdin.
+
 ## 0.5.1
 
 ### Performance

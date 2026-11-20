@@ -55,6 +55,15 @@ plane issue update PROJ-42 --parent none
 
 Use a parent issue ref to set a parent or `none` to clear it. When passing refs on the command line, change a parent on one issue at a time.
 
+Use `--description-file <path>` on issue creation or update to read a UTF-8 plain-text description and preserve its line breaks. Use `--description-file -` to read from stdin and pass `--title` when creating an issue this way. Choose one of `--description`, `--description-html`, and `--description-file`.
+
+```bash
+plane issue create --title "Release plan" --description-file plan.txt
+plane issue update PROJ-42 --description-file - < revised-plan.txt
+```
+
+`issue create --validate-only` checks issue inputs and existing resources and returns a JSON preview. A missing named label fails validation by default. Use `--create-labels` to create missing names or `--ignore-missing-labels` to skip them. The same flags apply to bulk creation. [Create issues in bulk](automation.md#create-issues-from-json-or-yaml)
+
 ## Project pages
 
 Plane CLI uses the project-pages public API. Availability varies by Plane edition and API version. Run `plane discover context --project PROJ` and check `capabilities.pages` to see whether the list endpoint is available. The probe reports baseline operations and cannot confirm update or delete support.

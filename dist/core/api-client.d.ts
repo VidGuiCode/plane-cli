@@ -46,6 +46,7 @@ export declare class PlaneApiClient {
     put<T>(path: string, body: unknown): Promise<T>;
 }
 export type PlaneReadClient = Pick<PlaneApiClient, "get"> & Partial<Pick<PlaneApiClient, "resolveLookup">>;
+export declare function cacheBatchReads(client: PlaneApiClient): PlaneReadClient;
 export declare function findInResolverList<T, R>(client: PlaneReadClient, path: string, select: (rows: T[]) => R | undefined): Promise<R | undefined>;
 export declare function fetchAll<T>(client: PlaneReadClient, path: string): Promise<T[]>;
 export declare function unwrap<T>(res: T[] | {

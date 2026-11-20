@@ -1,16 +1,16 @@
 import { findInResolverList } from "./api-client.js";
 import { ValidationError } from "./errors.js";
 import { stripHtml } from "./html.js";
+import { readIssueDescription } from "./issue-description.js";
 import { resolveCurrentUserId, resolveIssueRef, resolveLabel, resolveMember, UUID_RE, } from "./resolvers.js";
 export async function buildIssueUpdateBaseBody(client, workspace, fields) {
     const body = {};
     const title = fields.title ?? fields.name;
     if (title)
         body.name = title;
-    if (fields.descriptionHtml !== undefined)
-        body.description_html = fields.descriptionHtml;
-    else if (fields.description !== undefined)
-        body.description_html = `<p>${fields.description}</p>`;
+    const description = readIssueDescription(fields);
+    if (description !== undefined)
+        body.description_html = description;
     if (fields.priority)
         body.priority = fields.priority;
     if (fields.due)

@@ -653,3 +653,177 @@ describe("issue create --module / --cycle", () => {
     });
   });
 });
+
+describe("issue creation preflight and import", () => {
+  const project = { id: "project-123", identifier: "ROADMAP", name: "Roadmap" };
+
+  async function importIssues(fileName: string, text: string, flags: string[] = []) {
+    const dir = mkdtempSync(path.join(tmpdir(), "plane-cli-create-test-"));
+    try {
+      writeFileSync(path.join(dir, "details.txt"), "First line\r\n<tag> & text", "utf8");
+      const file = path.join(dir, fileName);
+      writeFileSync(file, text, "utf8");
+      await createIssueCommand().parseAsync(
+        ["bulk-create", "--file", file, "--project", "ROADMAP", "--json", ...flags],
+        { from: "user" },
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it.each(["create", "update"])("reads a description file on issue %s", async (verb) => {
+    writeConfig();
+    const dir = mkdtempSync(path.join(tmpdir(), "plane-cli-description-test-"));
+    const file = path.join(dir, "description.txt");
+    const html = "<p>First line<br>&lt;tag&gt; &amp; text</p>";
+    try {
+      writeFileSync(file, "First line\r\n<tag> & text", "utf8");
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      mockListFetch([issue()]);
+      process.argv = ["node", "plane", "--dry-run"];
+      const args = verb === "create" ? ["create", "--title", "New issue"] : ["update", "1"];
+      await createIssueCommand().parseAsync([...args, "--description-file", file], {
+        from: "user",
+      });
+      expect(JSON.parse(log.mock.calls[0][0] as string).body.description_html).toBe(html);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("previews YAML, relative description files and deduplicated labels without writes", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+    mockFetch((url, init) => {
+      expect(init?.method).toBeUndefined();
+      if (url.includes("/labels/")) return [];
+      if (url.includes("/states/")) return [{ id: "todo-1", name: "Todo" }];
+      return [project];
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await importIssues(
+      "issues.yaml",
+      "- title: First\n  descriptionFile: details.txt\n  state: Todo\n  due: 2028-02-29\n  label: [Docs]\n- title: Second\n  label: [docs]\n",
+      ["--create-labels"],
+    );
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({
+      created: 0,
+      failed: 0,
+      results: [
+        {
+          status: "planned",
+          requests: [
+            { path: expect.stringMatching(/labels\/$/), body: { name: "Docs" } },
+            {
+              body: {
+                name: "First",
+                state: "todo-1",
+                target_date: "2028-02-29",
+                description_html: "<p>First line<br>&lt;tag&gt; &amp; text</p>",
+                labels: ["<new-label-id:Docs>"],
+              },
+            },
+          ],
+        },
+        {
+          status: "planned",
+          requests: [{ body: { name: "Second", labels: ["<new-label-id:Docs>"] } }],
+        },
+      ],
+    });
+  });
+
+  it("reports invalid rows and blocks all writes, including label creation", async () => {
+    writeConfig();
+    const previousExitCode = process.exitCode;
+    mockFetch((url, init) => {
+      expect(init?.method).toBeUndefined();
+      return url.includes("/labels/") || url.includes("/states/") || url.includes("/members/")
+        ? []
+        : [project];
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      await importIssues(
+        "issues.json",
+        JSON.stringify([
+          { title: "Would be valid", label: ["New"] },
+          { title: "Bad date", due: "2027-02-29" },
+          { title: "Bad state", state: "Missing" },
+          { title: "Bad assignee", assignee: ["Nobody"] },
+        ]),
+        ["--create-labels"],
+      );
+      expect(process.exitCode).toBe(1);
+      expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({
+        created: 0,
+        failed: 3,
+        results: [
+          { status: "blocked" },
+          { status: "failed", error: expect.stringContaining("valid date") },
+          { status: "failed", error: expect.stringContaining('State "Missing"') },
+          { status: "failed", error: expect.stringContaining('Member "Nobody"') },
+        ],
+      });
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it("creates missing labels once and attaches their IDs to each created issue", async () => {
+    writeConfig();
+    const writes: unknown[] = [];
+    mockFetch((url, init) => {
+      if (init?.method === "POST") {
+        const body = JSON.parse(init.body as string);
+        writes.push(body);
+        if (url.includes("/labels/")) return { id: "new-label-1", name: "Docs" };
+        return issue({ name: body.name });
+      }
+      return url.includes("/labels/") ? [] : [project];
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await importIssues(
+      "issues.json",
+      JSON.stringify([
+        { title: "First", label: ["Docs"] },
+        { title: "Second", label: ["docs"] },
+      ]),
+      ["--create-labels"],
+    );
+    expect(writes).toEqual([
+      { name: "Docs" },
+      { name: "First", labels: ["new-label-1"] },
+      { name: "Second", labels: ["new-label-1"] },
+    ]);
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({ created: 2, failed: 0 });
+  });
+
+  it("validates a single issue and reports skipped labels without creating anything", async () => {
+    writeConfig();
+    mockFetch((url, init) => {
+      expect(init?.method).toBeUndefined();
+      return url.includes("/labels/") ? [] : [project];
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(
+      [
+        "create",
+        "--project",
+        "ROADMAP",
+        "--title",
+        "First",
+        "--label",
+        "Missing",
+        "--ignore-missing-labels",
+        "--validate-only",
+      ],
+      { from: "user" },
+    );
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({
+      valid: true,
+      requests: [{ body: { name: "First" }, ignoredLabels: ["Missing"] }],
+    });
+  });
+});

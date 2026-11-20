@@ -1,4 +1,4 @@
-import type { PlaneApiClient, PlaneReadClient } from "./api-client.js";
+import type { PlaneReadClient } from "./api-client.js";
 import type { PlaneIssue, PlaneState, PlaneMember } from "./types.js";
 export declare const UUID_RE: RegExp;
 export declare function resolveProject(client: PlaneReadClient, ws: string, ref: string): Promise<{
@@ -46,11 +46,11 @@ export declare function getMemberRole(m: PlaneMember): number | undefined;
  */
 export declare function getMemberId(m: PlaneMember): string;
 export declare function resolveMember(client: PlaneReadClient, ws: string, nameOrEmail: string): Promise<string>;
-export declare function resolveCycle(client: PlaneApiClient, ws: string, projectId: string, nameOrId: string): Promise<{
+export declare function resolveCycle(client: PlaneReadClient, ws: string, projectId: string, nameOrId: string): Promise<{
     id: string;
     name: string;
 }>;
-export declare function resolveModule(client: PlaneApiClient, ws: string, projectId: string, nameOrId: string): Promise<{
+export declare function resolveModule(client: PlaneReadClient, ws: string, projectId: string, nameOrId: string): Promise<{
     id: string;
     name: string;
 }>;
@@ -70,5 +70,6 @@ export declare function projectIssueFields(normalized: Record<string, unknown>, 
  */
 export declare function findUnknownFields(normalized: Record<string, unknown>, fieldsCsv: string): string[];
 export declare function resolveLabel(client: PlaneReadClient, ws: string, projectId: string, nameOrColor: string): Promise<string>;
+export declare function findLabelId(client: PlaneReadClient, ws: string, projectId: string, nameOrColor: string, verifyId?: boolean): Promise<string | undefined>;
 export {};
 //# sourceMappingURL=resolvers.d.ts.map

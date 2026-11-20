@@ -247,13 +247,18 @@ export function findUnknownFields(normalized, fieldsCsv) {
 }
 // ── Labels ────────────────────────────────────────────────────────────────────
 export async function resolveLabel(client, ws, projectId, nameOrColor) {
-    if (UUID_RE.test(nameOrColor)) {
-        return nameOrColor;
-    }
-    const lower = nameOrColor.toLowerCase();
-    const match = await findInResolverList(client, `workspaces/${ws}/projects/${projectId}/labels/`, (labels) => labels.find((l) => l.name.toLowerCase() === lower || l.color.toLowerCase() === lower));
-    if (!match)
+    const id = await findLabelId(client, ws, projectId, nameOrColor);
+    if (!id)
         throw new Error(`Label "${nameOrColor}" not found in this project. Check with: plane label list`);
-    return match.id;
+    return id;
+}
+export async function findLabelId(client, ws, projectId, nameOrColor, verifyId = false) {
+    const lower = nameOrColor.toLowerCase();
+    const isId = UUID_RE.test(nameOrColor);
+    if (isId && !verifyId)
+        return nameOrColor;
+    return findInResolverList(client, `workspaces/${ws}/projects/${projectId}/labels/`, (labels) => labels.find((label) => isId
+        ? label.id.toLowerCase() === lower
+        : label.name.toLowerCase() === lower || label.color?.toLowerCase() === lower)?.id);
 }
 //# sourceMappingURL=resolvers.js.map

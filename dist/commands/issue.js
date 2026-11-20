@@ -4,12 +4,15 @@ import { loadConfig, createClient, requireActiveWorkspace, requireActiveProject,
 import { unwrap, fetchAll } from "../core/api-client.js";
 import { printInfo, printError, printTable, printJson } from "../core/output.js";
 import { ask } from "../core/prompt.js";
-import { exitWithError, getErrorMessage, ValidationError } from "../core/errors.js";
+import { exitWithError, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
+import { readIssueDescription } from "../core/issue-description.js";
+import { executeIssueCreate, planIssueCreate, previewIssueCreate, validateCreateOptions, } from "../core/issue-create.js";
+import { createIssueBatch, readIssueCreateBatch } from "../core/issue-create-batch.js";
 import { assertIssueUpdateRoundTrip, buildIssueUpdateBaseBody, resolveIssueUpdateLabels, resolveIssueUpdateParent, resolveIssueUpdateState, validateIssueUpdateLabelIds, } from "../core/issue-update.js";
 import { hasIssueUpdateFlags, readIssueUpdateBatch, updateIssueBatch, } from "../core/issue-update-batch.js";
-import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, resolveModule, resolveCycle, resolveCurrentUserId, normalizeIssue, projectIssueFields, findUnknownFields, UUID_RE, } from "../core/resolvers.js";
+import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveCurrentUserId, normalizeIssue, projectIssueFields, findUnknownFields, } from "../core/resolvers.js";
 /**
  * Warn (on stderr, keeping stdout pure JSON) when `--fields` contains names that
  * aren't keys of the normalized issue — otherwise they're silently dropped and
@@ -21,11 +24,6 @@ function warnUnknownFields(normalized, fieldsCsv) {
         return;
     const valid = Object.keys(normalized).sort().join(", ");
     console.error(`Warning: ignoring unknown --fields name(s): ${unknown.join(", ")}. Valid fields: ${valid}`);
-}
-function validateDescriptionInput(opts) {
-    if (opts.description !== undefined && opts.descriptionHtml !== undefined) {
-        throw new ValidationError("--description and --description-html are mutually exclusive.");
-    }
 }
 export { assertIssueUpdateRoundTrip } from "../core/issue-update.js";
 export function createIssueCommand() {
@@ -223,6 +221,11 @@ export function createIssueCommand() {
         .option("--title <title>", "Issue title")
         .option("--description <description>", "Issue description")
         .option("--description-html <html>", "Raw HTML description (exclusive with --description)")
+        .option("--description-file <path|->", "Read a plain-text description from a file or stdin")
+        .option("--state <state>", "State name or ID")
+        .option("--create-labels", "Create missing named labels")
+        .option("--ignore-missing-labels", "Skip missing named labels")
+        .option("--validate-only", "Check the issue and its resources without writing")
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
         .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
         .option("--label <name>", "Label name (case-insensitive, repeatable)", collect, [])
@@ -235,126 +238,47 @@ export function createIssueCommand() {
         .option("--json", "Output raw JSON")
         .action(async (opts) => {
         try {
-            validateDescriptionInput(opts);
+            validateCreateOptions(opts);
+            if (opts.descriptionFile === "-" && opts.title === undefined) {
+                throw new ValidationError("--title is required when reading the description from stdin.");
+            }
+            const descriptionHtml = readIssueDescription(opts);
             const config = loadConfig();
             const client = createClient(config);
-            const ws = opts.workspace ?? requireActiveWorkspace(config);
-            const style = client.issuesSegment();
-            let projectId;
-            let identifier;
-            if (opts.project) {
-                const proj = await resolveProject(client, ws, opts.project);
-                projectId = proj.id;
-                identifier = proj.identifier;
-            }
-            else {
-                const active = requireActiveProject(config);
-                projectId = active.id;
-                identifier = active.identifier;
+            const workspace = opts.workspace ?? requireActiveWorkspace(config);
+            const project = opts.project
+                ? await resolveProject(client, workspace, opts.project)
+                : requireActiveProject(config);
+            const { id: projectId, identifier } = project;
+            if (opts.validateOnly && !opts.project) {
+                await resolveProject(client, workspace, projectId);
             }
             const title = opts.title ?? (await ask("Title"));
-            if (!title) {
-                throw new ValidationError("Title is required.");
+            let description = opts.description === "" ? undefined : descriptionHtml;
+            if (descriptionHtml === undefined) {
+                const text = await ask("Description (optional)", "");
+                if (text)
+                    description = readIssueDescription({ description: text });
             }
-            const description = opts.descriptionHtml !== undefined
-                ? undefined
-                : (opts.description ?? (await ask("Description (optional)", "")));
-            const body = { name: title };
-            if (opts.descriptionHtml !== undefined)
-                body.description_html = opts.descriptionHtml;
-            else if (description)
-                body.description_html = `<p>${description}</p>`;
-            if (opts.priority)
-                body.priority = opts.priority;
-            if (opts.due)
-                body.target_date = opts.due;
-            if (opts.start)
-                body.start_date = opts.start;
-            if (opts.assignee.length > 0) {
-                const ids = await Promise.all(opts.assignee.map((a) => a.toLowerCase() === "me"
-                    ? resolveCurrentUserId(client)
-                    : resolveMember(client, ws, a)));
-                body.assignees = ids;
-            }
-            for (const lid of opts.labelId) {
-                if (!UUID_RE.test(lid)) {
-                    throw new ValidationError(`--label-id requires a UUID; got "${lid}". Use --label for name resolution.`);
-                }
-            }
-            if (opts.label.length > 0 || opts.labelId.length > 0) {
-                const resolved = await Promise.all(opts.label.map((l) => resolveLabel(client, ws, projectId, l)));
-                body.labels = [...new Set([...resolved, ...opts.labelId])];
-            }
-            if (opts.parent) {
-                const { issueId: parentId } = await resolveIssueRef(client, ws, projectId, identifier, style, opts.parent);
-                body.parent = parentId;
-            }
-            // Resolve module/cycle up-front so a bad name fails before we create a
-            // dangling issue, and so --dry-run can preview the membership POSTs.
-            const mod = opts.module
-                ? await resolveModule(client, ws, projectId, opts.module)
-                : undefined;
-            const cyc = opts.cycle
-                ? await resolveCycle(client, ws, projectId, opts.cycle)
-                : undefined;
-            const path = `workspaces/${ws}/projects/${projectId}/${style}/`;
-            const moduleIssuesPath = mod
-                ? `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`
-                : undefined;
-            const cycleIssuesPath = cyc
-                ? `workspaces/${ws}/projects/${projectId}/cycles/${cyc.id}/cycle-issues/`
-                : undefined;
-            if (isDryRunEnabled()) {
-                const createCall = {
-                    dryRun: true,
-                    method: "POST",
-                    path,
-                    body,
-                    context: { workspace: ws, projectId, projectIdentifier: identifier },
-                };
-                // Membership runs after create, so the issue id is not known yet.
-                const calls = [createCall];
-                if (moduleIssuesPath) {
-                    calls.push({
-                        dryRun: true,
-                        method: "POST",
-                        path: moduleIssuesPath,
-                        body: { issues: ["<new-issue-id>"] },
-                        context: { workspace: ws, projectId, moduleId: mod.id },
-                    });
-                }
-                if (cycleIssuesPath) {
-                    calls.push({
-                        dryRun: true,
-                        method: "POST",
-                        path: cycleIssuesPath,
-                        body: { issues: ["<new-issue-id>"] },
-                        context: { workspace: ws, projectId, cycleId: cyc.id },
-                    });
-                }
-                printJson(calls.length === 1 ? createCall : calls);
+            const plan = await planIssueCreate(client, { workspace, projectId, projectIdentifier: identifier }, client.issuesSegment(), {
+                ...opts,
+                title,
+                description: undefined,
+                descriptionHtml: description,
+                descriptionFile: undefined,
+            }, opts, Boolean(opts.validateOnly));
+            const dryRun = isDryRunEnabled();
+            if (dryRun || opts.validateOnly) {
+                const calls = previewIssueCreate(plan);
+                if (opts.validateOnly)
+                    printJson({ valid: true, requests: calls });
+                else
+                    printJson(calls.length === 1 ? calls[0] : calls);
                 return;
             }
-            const issue = await client.post(path, body);
-            // Post-create membership. The issue already exists; a failed membership
-            // call must not be swallowed — report partial success with a non-zero
-            // exit and the created id so the user can retry module/cycle add.
-            const membershipErrors = [];
-            if (moduleIssuesPath) {
-                try {
-                    await client.post(moduleIssuesPath, { issues: [issue.id] });
-                }
-                catch (err) {
-                    membershipErrors.push(`module "${mod.name}": ${getErrorMessage(err)}`);
-                }
-            }
-            if (cycleIssuesPath) {
-                try {
-                    await client.post(cycleIssuesPath, { issues: [issue.id] });
-                }
-                catch (err) {
-                    membershipErrors.push(`cycle "${cyc.name}": ${getErrorMessage(err)}`);
-                }
+            const { issue, membershipErrors } = await executeIssueCreate(client, plan);
+            if (plan.labels.ignored.length) {
+                console.error(`Warning: skipped missing labels: ${plan.labels.ignored.join(", ")}`);
             }
             if (opts.json) {
                 if (membershipErrors.length > 0) {
@@ -369,13 +293,59 @@ export function createIssueCommand() {
                 printError(`Issue ${identifier}-${issue.sequence_id} (uuid: ${issue.id}) created, but membership failed: ${membershipErrors.join("; ")}. Retry with: plane module add ${issue.id} <module>`);
                 process.exit(1);
             }
-            if (mod)
-                printInfo(`Added to module "${mod.name}".`);
-            if (cyc)
-                printInfo(`Added to cycle "${cyc.name}".`);
+            for (const { kind, name } of plan.membership)
+                printInfo(`Added to ${kind} "${name}".`);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
+        }
+    });
+    command
+        .command("bulk-create")
+        .description("Create issues from a JSON or YAML array in one project")
+        .requiredOption("--file <path|->", "Read issue specs from a file or stdin")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier, name, or UUID")
+        .option("--create-labels", "Create missing named labels")
+        .option("--ignore-missing-labels", "Skip missing named labels")
+        .option("--validate-only", "Check all issues and resources without writing")
+        .option("--json", "Output a JSON summary")
+        .action(async (opts) => {
+        try {
+            validateCreateOptions(opts);
+            const entries = readIssueCreateBatch(opts.file);
+            const config = loadConfig();
+            const client = createClient(config);
+            const workspace = opts.workspace ?? requireActiveWorkspace(config);
+            const projectRef = opts.project ?? requireActiveProject(config).id;
+            const project = await resolveProject(client, workspace, projectRef);
+            const dryRun = isDryRunEnabled();
+            const summary = await createIssueBatch(client, { workspace, projectId: project.id, projectIdentifier: project.identifier }, entries, opts.file, opts, dryRun);
+            if (opts.json || dryRun || opts.validateOnly) {
+                printJson(summary);
+            }
+            else {
+                for (const row of summary.results) {
+                    const label = `Row ${row.row}${row.title ? ` (${row.title})` : ""}`;
+                    if (row.status === "failed")
+                        printError(`${label}: ${row.error}`);
+                    if (row.status === "blocked")
+                        printInfo(`${label}: skipped because preflight failed.`);
+                    if (row.status === "created" || row.status === "partial") {
+                        printInfo(`${label}: created ${project.identifier}-${row.issue.sequence_id} (uuid: ${row.issue.id})`);
+                        if (row.membershipErrors)
+                            printError(`${label}: ${row.membershipErrors.join("; ")}`);
+                        if (row.ignoredLabels)
+                            console.error(`Warning: ${label} skipped missing labels: ${row.ignoredLabels.join(", ")}`);
+                    }
+                }
+                printInfo(`Created ${summary.created} issue(s). Failed ${summary.failed} row(s).`);
+            }
+            if (summary.failed)
+                process.exitCode = 1;
+        }
+        catch (error) {
+            exitWithError(error, Boolean(opts.json));
         }
     });
     // ── update ────────────────────────────────────────────────────────────────
@@ -389,6 +359,7 @@ export function createIssueCommand() {
         .option("--name <name>", "New title (alias for --title)")
         .option("--description <description>", "New description")
         .option("--description-html <html>", "Raw HTML description (exclusive with --description)")
+        .option("--description-file <path|->", "Read a plain-text description from a file or stdin")
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
         .option("--state <state>", "State name or ID")
         .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
@@ -437,7 +408,7 @@ export function createIssueCommand() {
             if (issueRefArg === undefined) {
                 throw new ValidationError("Provide an issue ref or --from-json <file|->.");
             }
-            validateDescriptionInput(opts);
+            const descriptionHtml = readIssueDescription(opts);
             const config = loadConfig();
             const client = createClient(config);
             const ws = opts.workspace ?? requireActiveWorkspace(config);
@@ -463,7 +434,12 @@ export function createIssueCommand() {
             }
             // Resolve all refs up-front — fail before sending any API calls
             const resolved = await Promise.all(refs.map((ref) => resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, ref)));
-            const baseBody = await buildIssueUpdateBaseBody(client, ws, opts);
+            const baseBody = await buildIssueUpdateBaseBody(client, ws, {
+                ...opts,
+                description: undefined,
+                descriptionHtml,
+                descriptionFile: undefined,
+            });
             // Resolve state and labels per unique project (handles cross-project bulk)
             const uniqueProjectIds = [...new Set(resolved.map((r) => r.projectId))];
             const stateIdByProject = new Map();
@@ -488,7 +464,7 @@ export function createIssueCommand() {
                 !opts.state &&
                 opts.label.length === 0 &&
                 opts.labelId.length === 0) {
-                throw new ValidationError("Nothing to update. Use --title (or --name), --description, --description-html, --priority, --state, --assignee, --label, --label-id, --parent, --due, or --start.");
+                throw new ValidationError("Nothing to update. Use --title (or --name), --description, --description-html, --description-file, --priority, --state, --assignee, --label, --label-id, --parent, --due, or --start.");
             }
             // Dry-run: print all payloads and exit
             if (isDryRunEnabled()) {

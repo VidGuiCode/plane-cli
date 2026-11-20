@@ -13,3 +13,5 @@ context/
 .obsidian/
 skills/
 plane-cli-*.tgz
+.mimosa/
+.video_agent/

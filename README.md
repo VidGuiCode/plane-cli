@@ -1,286 +1,59 @@
-# plane-cli
+# Plane CLI
 
-Unofficial CLI for [Plane](https://plane.so) — manage your workspace, projects, and issues from any terminal or IDE.
+```text
+    ██████████
+    ██████████
+████    ██████
+████    ██████
+    ████
+    ████
+```
 
-![Version](https://img.shields.io/badge/version-0.5.0-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
-![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20mac-lightgrey)
+**Manage Plane work from your terminal.** List your assigned issues, update work in bulk, and automate project workflows on Plane Cloud or a self-hosted instance.
 
-Works with self-hosted Plane instances and Plane Cloud. Token-based auth — no browser session required.
+[Quick start](#quick-start) · [Commands](docs/commands.md) · [Automation](docs/automation.md) · [Roadmap](docs/roadmap.md)
 
----
+**Node.js 20+** · **Windows, macOS, Linux** · **Unofficial**
 
 ## Install
 
-Requires Node.js 20+ and npm.
+Install the `plane` command from a [GitHub release](https://github.com/VidGuiCode/plane-cli/releases).
 
 ```bash
 npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.5.0/plane-cli-0.5.0.tgz
 plane --version
-plane login
 ```
 
-This installs the `plane` command as a normal npm global CLI. It does not require `sudo`, does not install a system service, and does not modify system configuration.
-
-On Linux and macOS, avoid `sudo npm install -g` for this CLI. If npm global installs fail with permission errors, use a user-level Node.js setup such as [`nvm`](https://github.com/nvm-sh/nvm) or [`fnm`](https://github.com/Schniz/fnm), or configure npm's global prefix to a user-owned directory.
-
-### Windows / PowerShell
-
-npm installs a `plane.ps1` shim alongside `plane.cmd`. On a default PowerShell setup, running `plane` may fail with:
-
-```text
-plane.ps1 cannot be loaded because running scripts is disabled on this system.
-```
-
-This is PowerShell's execution policy blocking the `.ps1` shim, not a problem with the CLI. Either:
-
-- Call the `.cmd` shim directly: `plane.cmd where`, or
-- Allow local scripts once (recommended): `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then run `plane` normally.
-
-`cmd.exe` and Git Bash are unaffected.
-
----
+If PowerShell blocks `plane.ps1`, run `plane.cmd` instead. See [setup](docs/setup.md) for install troubleshooting, credentials, and upgrades.
 
 ## Quick start
 
-```bash
-plane login                    # connect to your Plane instance
-plane where                    # verify your context
-plane issue list               # list issues in the active project
-plane issue get PROJ-42        # fetch a single issue
-plane issue create             # create a new issue interactively
-```
-
-Context (account, workspace, project) is sticky — set it once and every command uses it.
-
----
-
-## Commands
-
-| Area | Commands |
-|------|----------|
-| **Auth** | `login`, `logout`, `profile` |
-| **Accounts** | `account list`, `use`, `show`, `remove` |
-| **Context** | `where`, `workspace list/use`, `project list/use/show/create/update` |
-| **Issues** | `issue list`, `mine`, `get`, `create`, `update`, `move`, `delete`, `close`, `reopen`, `open` |
-| **Cycles** | `cycle list`, `current`, `issues`, `create`, `ensure`, `add`, `remove`, `delete` |
-| **Modules** | `module list`, `issues`, `create`, `ensure`, `add`, `remove`, `delete` |
-| **Labels** | `label list`, `create`, `ensure`, `update`, `delete`, `add`, `remove` |
-| **Comments** | `comment list`, `add`, `update`, `delete` |
-| **Pages** | `page list`, `get`, `search`, `create`, `archive`, `unarchive`, `update`*, `delete`* |
-| **States** | `state list` |
-| **Discovery** | `discover context`, `projects`, `issue-inputs`, `states`, `members`, `labels`, `cycles`, `modules` |
-| **Utility** | `members list`, `completion`, `upgrade` |
-
-\* Page availability depends on the instance's edition and API version (`discover context` reports `capabilities.pages`). The CLI uses the project-pages public API; older Community instances may return 404. Page updates use the documented `PUT` method; use `--method PATCH` for an instance known to support PATCH. A 404/405 reports the failed endpoint/method. Discovery lists baseline operations conservatively and does not infer update/delete support from a successful list probe. `page archive` (reversed by `page unarchive`) retires a page without deleting it.
-
-Issue refs are flexible: `42` (active project), `PROJ-42` (any project), or a full UUID. Commands that accept multiple issue refs use comma-separated values, for example `ROADMAP-157,158,159`.
-
-Run `plane <command> --help` for full options on any command.
-
-### Rich text and parent links (v0.4.6)
-
-Use explicit HTML flags to preserve headings, lists, and other rich text without an extra paragraph wrapper:
+Have your Plane instance URL and API token ready. After login, list your projects and replace `PROJ` with a project identifier from the list.
 
 ```bash
-plane issue create --title "Release plan" --description-html '<h2>Plan</h2><ul><li>Ship</li></ul>'
-plane issue update PROJ-42 --description-html '<h2>Updated plan</h2><p>Ready</p>'
-plane page create "Release plan" --content-html '<h2>Plan</h2><p>Ready</p>'
-plane page update <page-uuid> --content-html '<h2>Updated plan</h2><p>Ready</p>'
-plane issue update PROJ-42 --parent none
+plane login
+plane project list
+plane project use PROJ
+plane where
+plane issue mine
 ```
 
-`--description` / `--description-html` and `--content` / `--content-html` are mutually exclusive. An explicitly empty value clears content on update (for example, `--description-html ""` or `--content-html ""`). The CLI sends raw HTML unchanged; Plane may sanitize it before storing it.
+The CLI saves your active account, workspace, and project for future commands. Use `plane issue get PROJ-42` to open an issue in the terminal or `plane issue create` to create one interactively.
 
-Page update defaults to `PUT`, which accepts a title, content, or both; content replaces the whole page body. Omitted fields are not sent. For older instances that require PATCH, pass `--method PATCH`. Dry-run previews the selected method; the CLI never falls back to another method automatically. Parent changes, including clearing, accept a single issue only.
+## Everyday workflows
 
-### Update issues from JSON (v0.5.0)
+| To | Run |
+| --- | --- |
+| See your issues and their due dates | `plane issue mine --columns id,title,due` |
+| See the active cycle and its issues | `plane cycle current` |
+| Find a project page | `plane page search "Release plan"` |
+| Get issue data as JSON | `plane issue list --json --fields identifier,title,state` |
+| Preview a batch of issue updates | `plane issue update --from-json updates.json --dry-run` |
 
-Use `--from-json` to update multiple issues with different field values in one command. Pass a file path or use `-` to read from standard input.
+Run `plane <command> --help` for options. For batch input examples, CI configuration, and coding agent workflows, see the [automation guide](docs/automation.md).
 
-```bash
-plane issue update --from-json updates.json --dry-run
-plane issue update --from-json - --json < updates.json
-```
+## Project links
 
-The input is a nonempty JSON array. Each object requires `issue` and at least one update field. All fields take strings except `assignee`, `label`, and `labelId`, which take nonempty arrays of nonblank strings.
+[Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [MIT license](LICENSE)
 
-| Field | Value |
-|---|---|
-| `issue` | A single issue ref, such as a project-qualified ref, a sequence number in the active project, or a UUID, written as a string. |
-| `title`, `name` | Replacement issue title. `title` takes precedence when both are supplied. |
-| `description`, `descriptionHtml` | Text or raw HTML. Use one of these fields. An empty string clears the description. |
-| `priority` | `urgent`, `high`, `medium`, `low`, or `none`. |
-| `state` | State name or ID in the issue's project. |
-| `assignee` | Assignee names, emails, or `me`. |
-| `label`, `labelId` | Label names or UUIDs. The supplied labels replace the existing set. |
-| `parent` | Parent issue ref or `none` to clear it. |
-| `due`, `start` | Dates in `YYYY-MM-DD` format or `none` to clear the date. |
-
-Use `--workspace` and `--project` to set the context for the batch. `--from-json` is mutually exclusive with a positional issue ref and individual update flags. Invalid input structure stops the entire batch before writes begin. If an issue resolves more than once, each row targeting it fails. Other rows can proceed when a row fails to resolve or update. Any failed row gives the command a nonzero exit status. The CLI checks the response after each PATCH, so a verification failure can occur after the server has applied changes.
-
-`--json` returns `updated` and `failed` counts and a `results` array in input order. Each result includes `issue`, `status` (`updated`, `failed`, or `planned`), and any resolved `issueId` and `projectId`. Failed rows include `error`. `--dry-run` always returns JSON, leaves `updated` at zero, and shows the `method`, `path`, and `body` for each `planned` row without sending the PATCH requests.
-
-<details>
-<summary><strong>Global flags</strong></summary>
-
-| Flag | Purpose |
-|------|---------|
-| `--workspace <slug>` | Override active workspace |
-| `--project <id-or-name>` | Override active project |
-| `--json` | Machine-readable JSON output |
-| `--compact` | Compact JSON without indentation (saves tokens) |
-| `--dry-run` | Validate and resolve without sending |
-| `--no-interactive` | Fail instead of prompting (auto-detected in non-TTY) |
-
-</details>
-
-<details>
-<summary><strong>Issue field names for <code>--fields</code></strong></summary>
-
-`issue list` and `issue get` support `--fields <names>` with `--json` for reduced payloads. Both normalized names and raw API names are accepted:
-
-| Normalized | Raw API alias(es) |
-|---|---|
-| `id` | — |
-| `projectId` | `project_id` |
-| `identifier` | — |
-| `sequence` | `sequence_id` |
-| `title` | `name` |
-| `state` | `state_name`, `state_id` |
-| `priority` | — |
-| `assignees` | — |
-| `labels` | `label_ids` |
-| `parent` | — |
-| `dueDate` | `target_date` |
-| `startDate` | `start_date` |
-| `createdAt` | `created_at` |
-| `updatedAt` | `updated_at` |
-| `description` | — |
-
-</details>
-
----
-
-## Using with AI agents
-
-Any AI agent that can run shell commands (Claude Code, Cursor, Copilot, CI scripts) can use `plane-cli` directly — no MCP server, no protocol, no setup.
-
-### Recommended workflow
-
-```bash
-# 1. Orient
-plane discover context
-
-# 2. Learn valid inputs
-plane discover issue-inputs --project <identifier>
-
-# 3. Preview changes
-plane issue create --title "Fix login bug" --dry-run --json
-
-# 4. Apply
-plane issue create --title "Fix login bug" --json
-```
-
-Use `--no-interactive` in automation. Use `--compact` to reduce token usage. When `--json` is used, errors are structured JSON on stderr.
-
-For repeatable setup scripts, use idempotent resource creation and bulk assignment:
-
-```bash
-plane module ensure "Website Deployment" --project ROADMAP --json
-plane cycle ensure "May 2026 Website Deployment Foundation" --project ROADMAP --start 2026-05-06 --end 2026-05-19 --json
-plane module add ROADMAP-157,158,159 "Website Deployment" --json
-plane cycle add ROADMAP-157,158,159 "May 2026 Website Deployment Foundation" --json
-```
-
-<details>
-<summary><strong>Discover schema</strong></summary>
-
-`plane discover` commands output normalized JSON with a consistent schema:
-
-```json
-{
-  "schemaVersion": 1,
-  "kind": "context",
-  "context": {
-    "account": { "name": "...", "baseUrl": "...", "apiStyle": "..." },
-    "workspace": { "slug": "..." },
-    "project": { "id": "...", "identifier": "...", "name": "..." },
-    "user": { "id": "...", "displayName": "...", "email": "..." }
-  }
-}
-```
-
-Dry-run output includes `dryRun`, `method`, `path`, `body`, and `context`.
-
-Exit codes: 0 = success, 1 = error, 2 = auth failure, 3 = validation, 4 = rate limit.
-
-</details>
-
----
-
-## Configuration
-
-Login state is stored in `~/.plane-cli/config.json`. This file contains your Plane base URL, API style, active workspace/project context, and Plane API token. Treat it as a secret and do not share or commit it.
-
-`plane logout` removes saved account data from the config file. To remove the installed CLI command itself, uninstall it with npm:
-
-```bash
-npm uninstall -g plane-cli
-```
-
-<details>
-<summary><strong>Environment variables (CI / containers)</strong></summary>
-
-When both `PLANE_BASE_URL` and `PLANE_API_TOKEN` are set, no saved login config is needed. This is the recommended mode for CI, containers, and other automation where you do not want a token written to `~/.plane-cli/config.json`.
-
-| Variable | Purpose |
-|---|---|
-| `PLANE_BASE_URL` | Plane instance URL |
-| `PLANE_API_TOKEN` | API token |
-| `PLANE_WORKSPACE` | Active workspace slug |
-| `PLANE_API_STYLE` | `issues` or `work-items` (auto-detected on login) |
-| `PLANE_CONFIG` | Path to custom config file |
-
-</details>
-
----
-
-## How this differs from other tools
-
-- **[prime-cli](https://github.com/makeplane/prime-cli-releases)** is the official Plane tool for server operations (deploy, backup, health checks). `plane-cli` talks to the API on behalf of a user — no server admin required.
-- **[Plane MCP server](https://github.com/makeplane/plane-mcp-server)** requires a running server process and an MCP-compatible client. `plane-cli` is a standalone binary — any tool that can run shell commands can use it.
-
----
-
-## Development
-
-```bash
-bun install
-bun run dev -- --help
-bun run build
-bun test
-```
-
-Tests use Vitest. See `tests/` for coverage of the HTTP client, config store, resolvers, and CLI smoke tests.
-
----
-
-## Vibe coding
-
-This project was built with AI assistance — architecture, tooling decisions, and implementation were developed through human-AI collaboration. The code works and the design is intentional, but it was not written line by line without AI involvement.
-
-Contributions are welcome regardless of how they are written.
-
----
-
-## Roadmap
-
-See [docs/roadmap.md](docs/roadmap.md) for planned features and improvements.
-
----
-
-## License
-
-[MIT](LICENSE)
+Plane CLI is developed with AI assistance. Contributions are welcome.

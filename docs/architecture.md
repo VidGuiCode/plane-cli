@@ -1,144 +1,28 @@
 # Architecture
 
-## Product Shape
+[Documentation](README.md) · [Contributing](../CONTRIBUTING.md)
 
-`plane-cli` is a local client CLI. It runs on the user's machine, stores auth and context state locally, and communicates with a Plane instance over its public REST API.
+Plane CLI runs locally and communicates with a Plane instance over its public REST API. It stores named accounts and the active workspace and project in a local config file. CI can supply credentials and context through environment variables and flags. [Setup](setup.md) · [CI authentication](automation.md#authentication-for-ci)
 
-It does not require:
-- Direct database access
-- Docker or server-side access
-- A running server process of its own
+## Command flow
 
-## Source Layout
+1. [`src/cli.ts`](../src/cli.ts) registers Commander command groups, then applies the help formatter recursively.
+2. A handler in [`src/commands/`](../src/commands/) reads flags, loads context, and resolves resource names or references to IDs.
+3. The handler calls the API client or emits a dry-run preview for supported writes. It then formats the result for a person or a script.
 
-### `src/cli.ts`
+## Shared modules
 
-Entrypoint. Registers all command groups and applies the help formatter after all commands are added, which is required for recursive help formatting.
+| Area | Responsibilities |
+| --- | --- |
+| [Config and accounts](../src/core/config-store.ts) | Load and save account profiles and active context. Build the client from saved credentials or environment overrides. |
+| [API client](../src/core/api-client.ts) | Send authenticated requests to `/api/v1`, unwrap responses, follow cursor pagination, retry transient errors, and honor `Retry-After`. |
+| [Resolvers](../src/core/resolvers.ts) | Resolve users and resources by name or ID, parse issue refs, and normalize issue results. |
+| [Discovery](../src/core/discovery.ts) | Gather project metadata and probe project-page availability for automation. |
+| [Issue updates](../src/core/issue-update.ts) and [batch updates](../src/core/issue-update-batch.ts) | Build update payloads and verify the API response. Batches also validate input files, reuse lookups, and report outcomes in input order. |
+| [Runtime](../src/core/runtime.ts), [prompts](../src/core/prompt.ts), [output](../src/core/output.ts), and [errors](../src/core/errors.ts) | Share runtime flags, interactive input, human and JSON output, and error handling. |
 
-### `src/commands/`
+## Context and compatibility
 
-User-facing command groups. Each file exports a single `create*Command()` function that builds and returns a Commander subtree.
+For commands that support workspace overrides, `--workspace` takes precedence over `PLANE_WORKSPACE` and then the saved workspace. Project-scoped commands that expose `--project` use it to override the saved project. A project-qualified issue ref can identify a project as part of the issue lookup.
 
-| File | Commands |
-|---|---|
-| `login.ts` | `plane login` |
-| `logout.ts` | `plane logout` |
-| `completion.ts` | `plane completion bash/zsh/fish` |
-| `account.ts` | `plane account list/use/show/remove` |
-| `where.ts` | `plane where` |
-| `members.ts` | `plane members list` |
-| `workspace.ts` | `plane workspace list/use` |
-| `project.ts` | `plane project list/use/show/create/update` |
-| `issue.ts` | `plane issue list/mine/get/create/update/move/delete/close/reopen/open` |
-| `module.ts` | `plane module list/issues/create/ensure/add/remove/delete` |
-| `label.ts` | `plane label list/create/delete/add/remove/update` |
-| `comment.ts` | `plane comment list/add/delete/update` |
-| `cycle.ts` | `plane cycle list/current/issues/create/ensure/add/remove/delete` |
-| `page.ts` | `plane page list/get/search/create/update/delete` |
-| `state.ts` | `plane state list` |
-| `discover.ts` | `plane discover context/projects/issue-inputs/states/members/labels/cycles/modules` |
-| `upgrade.ts` | `plane upgrade` |
-
-Command handlers stay thin: they resolve context, call core helpers, and print output. Business logic lives in `src/core/`.
-
-### `tests/`
-
-Test suite using Vitest.
-
-```text
-core/
-  api-client.test.ts      # HTTP client, retry logic, pagination
-  config-store.test.ts    # Config loading/saving, env vars
-  output.test.ts          # JSON/error output
-  resolvers.test.ts       # Issue ref parsing, name resolution
-  runtime.test.ts         # Global runtime flags
-commands/
-  cycle.test.ts           # Cycle create/ensure/bulk assignment
-  issue.test.ts           # Issue update round-trip validation
-  module.test.ts          # Module ensure/bulk assignment
-smoke/
-  cli-smoke.test.ts       # Version, help, command presence
-  due-date-roundtrip.test.ts
-  issue-update-audit.test.ts
-  label-roundtrip.test.ts
-```
-
-Current suite: 83 passing tests plus 7 live tests skipped unless their environment variables are set. Run with `npm test`.
-
-### `src/core/config-store.ts`
-
-Local config, account, and context management.
-
-Responsibilities:
-- Load and save `~/.plane-cli/config.json`
-- `requireActiveAccount()` gets active account or exits with error
-- `requireActiveWorkspace()` gets active workspace, checking `PLANE_WORKSPACE` first
-- `requireActiveProject()` gets active project or exits with error
-- `createClient()` builds a `PlaneApiClient` from active account, checking `PLANE_BASE_URL` and `PLANE_API_TOKEN` first
-
-### `src/core/api-client.ts`
-
-Plane HTTP boundary.
-
-Responsibilities:
-- `PlaneApiClient` authenticated `get`, `post`, `patch`, `delete` with retry logic
-- `unwrap()` normalizes paginated or plain array responses
-- `fetchAll()` fetches all cursor-paginated pages
-- `PlaneApiError` provides typed HTTP errors
-- Retry logic uses exponential backoff on 5xx errors and respects `Retry-After` on 429 responses
-
-### `src/core/resolvers.ts`
-
-Name-to-ID resolution helpers used across commands.
-
-| Function | Resolves |
-|---|---|
-| `resolveProject` | project identifier/name to `{ id, identifier, name }` |
-| `parseIssueRef` | string to `IssueRef` (UUID / PROJ-42 / seq number) |
-| `resolveIssueRef` | issue ref + context to `{ issueId, projectId, identifier }` |
-| `buildStateMap` | state array to `Map<id, name>` |
-| `resolveState` | issue + state map to state name string |
-| `resolveMember` | display name or email to member UUID |
-| `resolveLabel` | label name or color to label UUID |
-| `resolveCycle` | cycle name or UUID to `{ id, name }` |
-| `resolveModule` | module name or UUID to `{ id, name }` |
-
-### `src/core/output.ts`
-
-Terminal output utilities:
-- `printInfo`
-- `printError`
-- `printJson`
-- `printTable(rows, headers)`
-
-### `src/core/help.ts`
-
-Custom Commander help formatter applied recursively to all commands after registration. Adds section rules and a trailing newline.
-
-### `src/core/html.ts`
-
-`stripHtml(html)` strips HTML tags and decodes common entities. Used for rendering issue and page HTML content in the terminal.
-
-### `src/core/prompt.ts`
-
-`ask(label)` provides interactive readline prompts for commands that support both interactive and flag-driven input.
-
-### `src/core/types.ts`
-
-TypeScript interfaces for Plane API response shapes: `PlaneAccount`, `PlaneConfig`, `PlaneWorkspace`, `PlaneProject`, `PlaneIssue`, `PlaneState`, `PlaneModule`, `PlaneLabel`, `PlaneMember`, `PlaneCycle`, `PlanePage`, `PlaneComment`.
-
-## Auth And Context Model
-
-Each saved account contains:
-- A local name used to switch accounts
-- Plane base URL and API token
-- `apiStyle`: `issues` for self-hosted or `work-items` for Plane Cloud
-- Optional default workspace and project
-
-Context (`activeProfile`, `activeWorkspace`, `activeProject`) is stored separately from accounts so switching context does not require re-authenticating.
-
-Command precedence for workspace/project is explicit flag, then active context, then error.
-
-## Environment Variable Overrides
-
-`PLANE_BASE_URL`, `PLANE_API_TOKEN`, `PLANE_WORKSPACE`, `PLANE_API_STYLE`, and `PLANE_CONFIG` are checked at runtime. When both URL and token are set via env, no config file is required. This enables CI and container use.
+An account stores the detected or explicitly selected issue API style (`issues` or `work-items`). Environment-only authentication uses `PLANE_API_STYLE` and defaults to `issues`. Project-page support is checked independently because it varies by edition and API version.

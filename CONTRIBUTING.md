@@ -1,45 +1,36 @@
-# Contributing
+# Contributing to Plane CLI
 
-Thanks for contributing to `plane-cli`.
+[Documentation](docs/README.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
 
-Bun is used for local development. Node.js 20+ is required for users installing the CLI — Bun is only needed if you are working on the source.
+## Develop locally
 
-## Principles
-
-- Keep the CLI API-driven
-- Avoid Plane-server-specific assumptions
-- Prefer stable command verbs over ad hoc flags
-- Keep human-readable output clean and add machine-readable output deliberately
-
-## Development
+Use Node.js 20 or later. Install dependencies with npm and run the compiled CLI from the checkout.
 
 ```bash
-bun install
-bun run typecheck
-bun run build
-bun test
+npm ci
+npm run build
+node dist/cli.js --help
 ```
 
-## Testing
+If you use Bun, `bun install` installs dependencies and `bun run dev --help` runs the CLI directly from TypeScript. Use `bun run test` to run the repository's Vitest script.
 
-Tests are organized in `tests/`:
+## Verify changes
 
+Run the CI checks from the repository root.
+
+```bash
+npm run typecheck
+npm run lint
+npm run format:check
+npm run build
+npm test
 ```
-tests/
-├── core/
-│   ├── api-client.test.ts      # HTTP client, retry logic, pagination (24 tests)
-│   ├── config-store.test.ts    # Config loading/saving, env vars (18 tests)
-│   └── resolvers.test.ts       # Issue ref parsing, name resolution (21 tests)
-└── smoke/
-    └── cli-smoke.test.ts       # Version, help, command presence (3 tests)
-```
 
-Run tests: `npm test` or `bun test`
-Run with coverage: `npm run test -- --coverage`
+The build refreshes `dist/cli.js` before the CLI smoke tests use it. Test suites under `tests/core/` exercise shared utilities, `tests/commands/` cover command behavior, and `tests/smoke/` cover the compiled entry point and opt-in live checks. Live tests create or modify issues. They require `PLANE_CLI_LIVE_TESTS=1` and a dedicated `PLANE_TEST_PROJECT`. See the individual tests for additional variables.
 
-## Project Boundaries
+## Work on commands
 
-- Commands live in `src/commands/`
-- Shared logic belongs in `src/core/`
-- Avoid coupling command handlers directly to HTTP details
-- Keep auth/context behavior reusable across command groups
+- Keep command registration and orchestration in `src/commands/` and reusable behavior in `src/core/`.
+- Use the Plane public API and account for the supported issue endpoint styles.
+- Preserve existing command syntax and machine-readable output when adding options.
+- Update command help and the relevant guide when behavior changes. Record user-facing changes in the changelog.

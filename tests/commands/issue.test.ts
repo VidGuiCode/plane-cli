@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -98,6 +98,167 @@ function mockListFetch(issues: Array<Record<string, unknown>>): void {
     });
   }) as unknown as typeof fetch;
 }
+
+async function runIssueBatch(rows: unknown, args: string[] = []): Promise<void> {
+  const dir = mkdtempSync(path.join(tmpdir(), "plane-cli-batch-test-"));
+  const file = path.join(dir, "batch.json");
+  try {
+    writeFileSync(file, JSON.stringify(rows), "utf8");
+    await createIssueCommand().parseAsync(["update", "--from-json", file, "--json", ...args], {
+      from: "user",
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe("issue update --from-json", () => {
+  it("shares resolver reads and sends each issue its own update", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    const reads: string[] = [];
+    const writes = new Map<string, unknown>();
+    mockFetch((url, init) => {
+      const pathname = new URL(url).pathname;
+      if (init?.method === "PATCH") {
+        const id = pathname.split("/").at(-2)!;
+        const body = JSON.parse(String(init.body));
+        writes.set(id, body);
+        return issue({ id, ...body });
+      }
+      reads.push(pathname);
+      if (pathname.endsWith("/projects/")) {
+        return { results: [{ id: "project-123", identifier: "ROADMAP", name: "Roadmap" }] };
+      }
+      if (pathname.endsWith("/issues/")) {
+        return { results: [issue(), issue({ id: "issue-2", sequence_id: 2 })] };
+      }
+      if (pathname.endsWith("/states/")) {
+        return {
+          results: [
+            { id: "state-1", name: "Todo" },
+            { id: "state-2", name: "Done" },
+          ],
+        };
+      }
+      throw new Error(`Unexpected GET ${pathname}`);
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runIssueBatch([
+      { issue: "ROADMAP-1", title: "First", state: "Todo" },
+      { issue: "ROADMAP-2", name: "Second", state: "Done" },
+    ]);
+
+    expect(reads.filter((url) => url.endsWith("/projects/"))).toHaveLength(1);
+    expect(reads.filter((url) => url.endsWith("/issues/"))).toHaveLength(1);
+    expect(reads.filter((url) => url.endsWith("/states/"))).toHaveLength(1);
+    expect(writes.get("issue-1")).toEqual({ name: "First", state: "state-1" });
+    expect(writes.get("issue-2")).toEqual({ name: "Second", state: "state-2" });
+    expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({
+      updated: 2,
+      failed: 0,
+      results: [
+        { issue: "ROADMAP-1", issueId: "issue-1", status: "updated" },
+        { issue: "ROADMAP-2", issueId: "issue-2", status: "updated" },
+      ],
+    });
+  });
+
+  it("previews resolved payloads and fails rows targeting the same issue", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+    const firstId = "11111111-1111-4111-8111-111111111111";
+    const secondId = "22222222-2222-4222-8222-222222222222";
+    mockListFetch([issue({ id: firstId }), issue({ id: secondId, sequence_id: 2 })]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    await runIssueBatch([
+      { issue: "1", title: "First" },
+      { issue: firstId, title: "Duplicate" },
+      { issue: "2", descriptionHtml: "", due: "none" },
+    ]);
+
+    expect(
+      vi.mocked(globalThis.fetch).mock.calls.every(([, init]) => init?.method !== "PATCH"),
+    ).toBe(true);
+    expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({
+      updated: 0,
+      failed: 2,
+      results: [
+        { issue: "1", issueId: firstId, status: "failed" },
+        { issue: firstId, issueId: firstId, status: "failed" },
+        {
+          issue: "2",
+          issueId: secondId,
+          status: "planned",
+          method: "PATCH",
+          body: { description_html: "", target_date: null },
+        },
+      ],
+    });
+    if (exit.mock.calls.length > 0) expect(exit).toHaveBeenCalledWith(expect.any(Number));
+    else expect(process.exitCode).not.toBe(0);
+    process.exitCode = undefined;
+  });
+
+  it("rejects invalid rows and conflicting flags before touching the API", async () => {
+    writeConfig();
+    mockFetch(() => ({}));
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await runIssueBatch([
+      { issue: "1", title: "Valid" },
+      { issue: "2", assignee: "wrong type" },
+    ]);
+    await runIssueBatch([{ issue: "1", title: "Valid" }], ["--priority", "low"]);
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledTimes(2);
+    expect(error).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps successful writes and reports resolution and PATCH failures in input order", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    const targets: string[] = [];
+    globalThis.fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (init?.method !== "PATCH") {
+        return Response.json({ results: [issue(), issue({ id: "issue-2", sequence_id: 2 })] });
+      }
+      const id = url.pathname.split("/").at(-2)!;
+      targets.push(id);
+      if (id === "issue-1") return Response.json({ detail: "Fixture rejection" }, { status: 400 });
+      return Response.json(issue({ id, ...JSON.parse(String(init.body)) }));
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const originalExitCode = process.exitCode;
+    try {
+      await runIssueBatch([
+        { issue: "1", title: "Rejected" },
+        { issue: "99", title: "Missing" },
+        { issue: "2", title: "Updated" },
+      ]);
+
+      expect(new Set(targets)).toEqual(new Set(["issue-1", "issue-2"]));
+      expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({
+        updated: 1,
+        failed: 2,
+        results: [
+          { issue: "1", issueId: "issue-1", status: "failed", error: expect.any(String) },
+          { issue: "99", status: "failed", error: expect.any(String) },
+          { issue: "2", issueId: "issue-2", status: "updated" },
+        ],
+      });
+    } finally {
+      process.exitCode = originalExitCode;
+    }
+  });
+});
 
 describe("assertIssueUpdateRoundTrip", () => {
   it("requires an explicitly empty description to actually be empty", () => {

@@ -41,7 +41,8 @@ export declare class PlaneApiClient {
     delete(path: string): Promise<void>;
     put<T>(path: string, body: unknown): Promise<T>;
 }
-export declare function fetchAll<T>(client: PlaneApiClient, path: string): Promise<T[]>;
+export type PlaneReadClient = Pick<PlaneApiClient, "get">;
+export declare function fetchAll<T>(client: PlaneReadClient, path: string): Promise<T[]>;
 export declare function unwrap<T>(res: T[] | {
     results: T[];
 } | unknown): T[];

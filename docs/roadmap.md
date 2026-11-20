@@ -167,56 +167,58 @@ Small, low-risk patch: settled the two verification items left open by v0.4.3 (i
 
 ## v0.4.5 *(included in v0.4.6)* — pages on commercial editions
 
-Plane's commercial API surface (Plane Cloud, and the closed-source Commercial/Airgapped self-hosted editions) exposes project pages on the token-authenticated `/api/v1` API — list, create, retrieve, archive/unarchive — while the Community self-hosted edition does not (see [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md)). The CLI already implements the full `page` command surface; this release makes it correct against the documented commercial API and honest about the two operations no edition's public API exposes (update/delete — [makeplane/plane#8598](https://github.com/makeplane/plane/issues/8598), PRs still unmerged). **Effort: M.** Follows the v0.4.2 precedent of shipping additive commands in a patch. Implementation plan: [v0.4.5-plan.md](../context/docs/project/v0.4.5-plan.md). Implemented against the documented API shapes with mocked-transport unit tests; live verification against a Cloud/Commercial instance still pending (needs a Cloud trial workspace or a Commercial upgrade).
+The v0.4.5 work targeted the project-page operations documented at the time for Plane Cloud and Commercial/Airgapped self-hosted editions on the token-authenticated `/api/v1` API. These included list, create, retrieve, archive, and unarchive. The Community self-hosted instance tested during that work returned 404. Mocked-transport tests cover the documented API shapes. Live verification against a Cloud or Commercial instance is pending.
 
 ### Features
 
-- ~~**`plane page archive <page>` / `plane page unarchive <page>`**~~ - shipped: the documented page lifecycle operations on the commercial pages API (`POST`/`DELETE …/pages/{id}/archive/`, 204 responses), and the supported alternative to delete; advertised in `discover` via the `operations` array.
-- ~~**`page create` commercial-correct body**~~ - shipped: the documented API requires `description_html`; always sent (default `<p></p>`), plus `--access <0|1>` (public/private).
+- ~~**`plane page archive <page>` / `plane page unarchive <page>`**~~ — implemented on the commercial pages API (`POST`/`DELETE …/pages/{id}/archive/`, 204 responses) and advertised in `discover` via the `operations` array.
+- ~~**`page create` request body**~~ — always sends the required `description_html` field (default `<p></p>`) and accepts `--access <0|1>` (public/private).
 
 ### Error Messages
 
-- ~~**`page update` / `page delete` report the real limitation**~~ - shipped: no edition exposes page PATCH/DELETE on the public API today; a 404/405 on those routes now says so plainly (pointing at `page archive` and the upstream issue) instead of a misleading "page not found". The request is still attempted first, so instances running a Plane version that merges the upstream PRs keep working.
+- ~~**`page update` / `page delete` diagnostics**~~ — v0.4.5 added diagnostics for 404/405 responses based on the API documentation available at the time. The v0.4.6 changes supersede that handling with documented `PUT` support and endpoint-specific diagnostics. See [makeplane/plane#8598](https://github.com/makeplane/plane/issues/8598) for the original request.
 
 ### Polish
 
-- ~~**`capabilities.pages` reports the operation level**~~ - shipped: additive `operations` array (`list`, `get`, `create`, `archive`; `[]` when unsupported/unknown) so agents can rely on the surface without probing per-operation.
+- ~~**`capabilities.pages` reports baseline operations**~~ — `operations` lists `list`, `get`, `create`, and `archive` when the page probe succeeds and returns `[]` when support is unavailable or unknown.
 
 ---
 
 ## v0.4.6 *(shipped)* — rewrite workflow gaps
 
-Addresses the three rewrite workflow limitations. The current [Plane API reference](https://developers.plane.so/api-reference/page/update-project-page) documents PUT for project-page updates with optional `name` and `description_html`; supplied content replaces the page body. The reporting instance's version and endpoint remain unknown, so live verification there is still pending. See [rich-text-parent-page-update.md](../context/research/lessons-learned/rich-text-parent-page-update.md).
+Addresses the reported rewrite workflow limitations. Plane documents `PUT` for project-page updates with optional `name` and `description_html`. Supplying content replaces the page body. [Plane API reference](https://developers.plane.so/api-reference/page/update-project-page)
 
 ### Features / Bug Fixes
 
-- ~~**Preserve explicit rich-text input**~~ — shipped: `--description-html` on issue create/update and `--content-html` on page create/update preserve supplied HTML. Text and HTML inputs are mutually exclusive; updates accept empty content. Regression tests check outgoing headings/lists, empty values, and ignored clears.
-- ~~**Clear issue parents**~~ — shipped: `plane issue update <ref> --parent none` sends `parent: null` without resolving `none`. Tests cover assigning/clearing parents, returned values, and the existing bulk-parent restriction.
-- ~~**Project UUID references**~~ — shipped: `project use` and `--project` accept a project UUID copied from a browser URL, alongside identifier/name matching.
+- ~~**Preserve explicit rich-text input**~~ — `--description-html` on issue create/update and `--content-html` on page create/update preserve supplied HTML. Text and HTML inputs are mutually exclusive, and updates accept empty content. Regression tests check outgoing headings and lists, empty values, and ignored clears.
+- ~~**Clear issue parents**~~ — `plane issue update <ref> --parent none` sends `parent: null`. Tests cover assigning and clearing parents, returned values, and the existing bulk-parent restriction.
+- ~~**Project UUID references**~~ — `project use` and `--project` accept a project UUID copied from a browser URL, alongside identifier and name matching.
 
 ### Compatibility / Verification
 
-- ~~**Page-update methods and diagnostics**~~ — shipped against the current documented API: PUT by default, explicit `--method PATCH` compatibility, matching dry-run output, and no automatic cross-method fallback. Errors describe the method, endpoint, and status instead of asserting all editions lack updates. Tests cover success and failure paths. Live PUT verification on the reporting instance remains pending.
+- ~~**Page-update methods and diagnostics**~~ — the CLI defaults to `PUT` and supports explicit `--method PATCH` for compatible instances. Dry-run output and errors show the selected method. Errors also identify the endpoint and HTTP status for 404 and 405 responses. Tests cover both methods, failure handling, and the absence of automatic fallback. A live check confirmed page updates via `PUT` on one configured Plane instance.
 
 ---
 
-## v0.5.0 *(planned)* — bulk & latency
+## v0.5.0 *(shipped)* — batch issue updates
 
-The highest-impact remaining theme. In the 2026-07-10 gap report a real ~60-mutation session blew a 2-minute shell timeout because each per-issue update was its own cold-start process. This release makes many-mutation and low-latency workflows first-class. **Effort: L.** Both items target the same pain and are complementary; `--from-json` can ship first if splitting the release. See [production-use-gap-report.md](../context/research/lessons-learned/production-use-gap-report.md).
+The 2026-07-10 gap report described a batch of roughly 60 updates exceeding a two-minute shell timeout when each issue update launched a separate process. This release handles distinct updates in one process.
 
 ### Features
 
-- **`plane issue update --from-json <file|->`** - per-issue batch mutations with distinct values per ticket, resolving project/state/member/label maps once and PATCHing each entry in a single process. Reuses the v0.4.3 partial-success semantics (report per-entry failures, non-zero exit, created/target ids). Gap report P2.
+- ~~**`plane issue update --from-json <file|->`**~~ — validates all input before writing, reuses lookups across rows, and reports success or failure for each issue in input order. Dry runs preview the resolved requests, and any failed row gives the command a nonzero exit status. [Batch input and output](../README.md#update-issues-from-json-v050)
 
-### Reliability
+---
 
-- **On-disk resolver cache** - cache project/state/member/label maps keyed by workspace+project, invalidated on 404/name-miss + TTL, with an opt-out flag. Cuts the ~5–6 s per-command cold start. Architectural — needs a short design note on cache location and invalidation before implementation. Gap report P2.
+## Resolver latency *(planned after v0.5.0)*
+
+- **On-disk resolver cache** — share project, state, member, and label lookups across separate commands. The design needs to cover cache location, expiry, invalidation on 404 or a missing name, and a way to opt out.
 
 ---
 
 ## v0.6.0 *(planned)* — author from files
 
-Create many issues from a spec file without pre-existing labels or fragile heredoc quoting. Builds on the v0.5.0 batch/latency work. **Effort: L.** The preflight validation is shared across all three items.
+Create many issues from a spec file without pre-existing labels or fragile heredoc quoting. Builds on the v0.5.0 batch work. **Effort: L.** The preflight validation is shared across all three items.
 
 ### Features
 
@@ -235,7 +237,7 @@ Real but lower-impact; slot into a minor/patch when a workflow needs them.
 
 ### Wontfix
 
-- ~~**Workspace-level pages fallback**~~ - Pages are served only by the web app's session-cookie-authenticated internal API; the versioned token endpoint 404s and the unversioned one 401s with an API key, so no CLI-side fix is possible (confirms the ROADMAP-175 close-out). See [pages-support-root-cause.md](../context/research/lessons-learned/pages-support-root-cause.md). *(Wontfix applies to the Community self-hosted edition. Plane Cloud / Commercial do expose project pages on `/api/v1` — partial CLI support is planned as v0.4.5 above.)*
+- ~~**Workspace-level pages fallback**~~ — on the Community self-hosted instance tested for ROADMAP-175, the versioned endpoint returned 404 and the web app's internal endpoint returned 401 with an API key. The CLI's documented project-page support for Plane Cloud and Commercial is included in v0.4.6.
 
 ---
 

@@ -1,4 +1,4 @@
-import type { PlaneApiClient } from "./api-client.js";
+import type { PlaneApiClient, PlaneReadClient } from "./api-client.js";
 import { unwrap, fetchAll } from "./api-client.js";
 import { ValidationError } from "./errors.js";
 import type {
@@ -16,7 +16,7 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 // ── Project ──────────────────────────────────────────────────────────────────
 
 export async function resolveProject(
-  client: PlaneApiClient,
+  client: PlaneReadClient,
   ws: string,
   ref: string,
 ): Promise<{ id: string; identifier: string; name: string }> {
@@ -63,7 +63,7 @@ export function parseIssueRef(ref: string): IssueRef {
 }
 
 export async function resolveIssueRef(
-  client: PlaneApiClient,
+  client: PlaneReadClient,
   ws: string,
   activeProjectId: string | undefined,
   activeProjectIdentifier: string | undefined,
@@ -116,7 +116,7 @@ export async function resolveIssueRef(
 }
 
 async function findIssueBySeq(
-  client: PlaneApiClient,
+  client: PlaneReadClient,
   ws: string,
   projectId: string,
   style: string,
@@ -166,7 +166,7 @@ export function resolveState(issue: PlaneIssue, stateMap: Map<string, string>): 
 // ── Current user ─────────────────────────────────────────────────────────────
 
 /** Fetch the authenticated user's ID via /users/me/. */
-export async function resolveCurrentUserId(client: PlaneApiClient): Promise<string> {
+export async function resolveCurrentUserId(client: PlaneReadClient): Promise<string> {
   const user = await client.get<{ id: string }>("users/me/");
   return user.id;
 }
@@ -218,7 +218,7 @@ export function getMemberId(m: PlaneMember): string {
 }
 
 export async function resolveMember(
-  client: PlaneApiClient,
+  client: PlaneReadClient,
   ws: string,
   nameOrEmail: string,
 ): Promise<string> {
@@ -355,7 +355,7 @@ export function findUnknownFields(
 // ── Labels ────────────────────────────────────────────────────────────────────
 
 export async function resolveLabel(
-  client: PlaneApiClient,
+  client: PlaneReadClient,
   ws: string,
   projectId: string,
   nameOrColor: string,

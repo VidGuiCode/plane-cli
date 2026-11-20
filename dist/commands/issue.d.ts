@@ -1,6 +1,5 @@
 import { Command } from "commander";
-import type { PlaneIssue } from "../core/types.js";
-export declare function assertIssueUpdateRoundTrip(issue: PlaneIssue, body: Record<string, unknown>): void;
+export { assertIssueUpdateRoundTrip } from "../core/issue-update.js";
 export declare function createIssueCommand(): Command;
 /**
  * Resolve the `--columns` value to a validated list of column keys, defaulting

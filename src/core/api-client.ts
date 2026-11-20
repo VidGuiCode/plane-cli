@@ -278,7 +278,9 @@ export class PlaneApiClient {
   }
 }
 
-export async function fetchAll<T>(client: PlaneApiClient, path: string): Promise<T[]> {
+export type PlaneReadClient = Pick<PlaneApiClient, "get">;
+
+export async function fetchAll<T>(client: PlaneReadClient, path: string): Promise<T[]> {
   const sep = path.includes("?") ? "&" : "?";
   let url = `${path}${sep}per_page=100`;
   const results: T[] = [];

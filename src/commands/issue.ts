@@ -14,6 +14,20 @@ import { exitWithError, getErrorMessage, ValidationError } from "../core/errors.
 import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
 import {
+  assertIssueUpdateRoundTrip,
+  buildIssueUpdateBaseBody,
+  resolveIssueUpdateLabels,
+  resolveIssueUpdateParent,
+  resolveIssueUpdateState,
+  validateIssueUpdateLabelIds,
+  type IssueUpdateFields,
+} from "../core/issue-update.js";
+import {
+  hasIssueUpdateFlags,
+  readIssueUpdateBatch,
+  updateIssueBatch,
+} from "../core/issue-update-batch.js";
+import {
   resolveProject,
   resolveIssueRef,
   buildStateMap,
@@ -44,106 +58,13 @@ function warnUnknownFields(normalized: Record<string, unknown>, fieldsCsv: strin
   );
 }
 
-type IssueUpdateMismatch = {
-  field: string;
-  expected: unknown;
-  actual: unknown;
-};
-
-function stateIdFromIssue(issue: PlaneIssue): string | null {
-  if (typeof issue.state === "string") return issue.state;
-  if (issue.state && typeof issue.state === "object" && "id" in issue.state) {
-    return String(issue.state.id);
-  }
-  if (issue.state_detail && typeof issue.state_detail === "object" && "id" in issue.state_detail) {
-    return String((issue.state_detail as PlaneState & { id?: string }).id);
-  }
-  return null;
-}
-
-function labelIdsFromIssue(issue: PlaneIssue): string[] {
-  if (Array.isArray(issue.label_ids)) return issue.label_ids.map(String);
-  return (issue.labels ?? [])
-    .map((label) => {
-      if (typeof label === "string") return label;
-      if (label && typeof label === "object" && "id" in label) return String(label.id);
-      return null;
-    })
-    .filter((label): label is string => Boolean(label));
-}
-
-function descriptionMatches(issue: PlaneIssue, expectedHtml: string): boolean {
-  const expectedText = stripHtml(expectedHtml);
-  const candidates = [
-    issue.description_html,
-    issue.description_stripped,
-    (issue as PlaneIssue & { description?: string }).description,
-  ].filter((value): value is string => typeof value === "string");
-  // Empty updates must actually clear the content; every string includes "".
-  return candidates.some((candidate) =>
-    expectedText === "" ? stripHtml(candidate) === "" : stripHtml(candidate).includes(expectedText),
-  );
-}
-
 function validateDescriptionInput(opts: { description?: string; descriptionHtml?: string }): void {
   if (opts.description !== undefined && opts.descriptionHtml !== undefined) {
     throw new ValidationError("--description and --description-html are mutually exclusive.");
   }
 }
 
-function arrayContainsAll(actual: unknown, expected: unknown): boolean {
-  if (!Array.isArray(actual) || !Array.isArray(expected)) return false;
-  const actualSet = new Set(actual.map(String));
-  return expected.map(String).every((value) => actualSet.has(value));
-}
-
-export function assertIssueUpdateRoundTrip(issue: PlaneIssue, body: Record<string, unknown>): void {
-  const mismatches: IssueUpdateMismatch[] = [];
-
-  for (const [field, expected] of Object.entries(body)) {
-    if (field === "name" && issue.name !== expected) {
-      mismatches.push({ field, expected, actual: issue.name });
-    } else if (
-      field === "description_html" &&
-      typeof expected === "string" &&
-      !descriptionMatches(issue, expected)
-    ) {
-      mismatches.push({
-        field,
-        expected: stripHtml(expected),
-        actual: issue.description_stripped ?? issue.description_html ?? null,
-      });
-    } else if (field === "priority" && issue.priority !== expected) {
-      mismatches.push({ field, expected, actual: issue.priority });
-    } else if (field === "state" && stateIdFromIssue(issue) !== expected) {
-      mismatches.push({ field, expected, actual: stateIdFromIssue(issue) });
-    } else if (field === "assignees" && !arrayContainsAll(issue.assignees, expected)) {
-      mismatches.push({ field, expected, actual: issue.assignees ?? [] });
-    } else if (field === "labels" && !arrayContainsAll(labelIdsFromIssue(issue), expected)) {
-      mismatches.push({ field, expected, actual: labelIdsFromIssue(issue) });
-    } else if (field === "parent" && issue.parent !== expected) {
-      mismatches.push({ field, expected, actual: issue.parent ?? null });
-    } else if (field === "target_date" && issue.target_date !== expected) {
-      mismatches.push({ field, expected, actual: issue.target_date ?? null });
-    } else if (field === "start_date" && issue.start_date !== expected) {
-      mismatches.push({ field, expected, actual: issue.start_date ?? null });
-    }
-  }
-
-  if (mismatches.length > 0) {
-    const summary = mismatches
-      .map(
-        (mismatch) =>
-          `${mismatch.field}: expected ${JSON.stringify(mismatch.expected)}, got ${JSON.stringify(
-            mismatch.actual,
-          )}`,
-      )
-      .join("; ");
-    throw new ValidationError(
-      `Plane API did not confirm requested issue update fields (${summary}). The update may have been silently ignored by this API version.`,
-    );
-  }
-}
+export { assertIssueUpdateRoundTrip } from "../core/issue-update.js";
 
 export function createIssueCommand(): Command {
   const command = new Command("issue")
@@ -633,8 +554,11 @@ export function createIssueCommand(): Command {
   // ── update ────────────────────────────────────────────────────────────────
 
   command
-    .command("update <issue>")
-    .description("Update one or more issues. Accepts comma-separated refs: PROJ-1,2,3")
+    .command("update [issue]")
+    .description(
+      "Update comma-separated issue refs (PROJ-1,2,3) or apply per-issue changes from JSON",
+    )
+    .option("--from-json <file|->", "Read a batch of issue updates from a JSON file or stdin")
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
       "--project <identifier-or-name>",
@@ -668,26 +592,58 @@ export function createIssueCommand(): Command {
     .option("--json", "Output raw JSON")
     .action(
       async (
-        issueRefArg: string,
-        opts: {
+        issueRefArg: string | undefined,
+        opts: IssueUpdateFields & {
+          fromJson?: string;
           workspace?: string;
           project?: string;
-          title?: string;
-          name?: string;
-          description?: string;
-          descriptionHtml?: string;
-          priority?: string;
-          state?: string;
           assignee: string[];
           label: string[];
           labelId: string[];
-          parent?: string;
-          due?: string;
-          start?: string;
           json?: boolean;
         },
       ) => {
         try {
+          if (opts.fromJson !== undefined) {
+            if (issueRefArg !== undefined || hasIssueUpdateFlags(opts)) {
+              throw new ValidationError(
+                "--from-json cannot be combined with an issue argument or update flags.",
+              );
+            }
+            const entries = readIssueUpdateBatch(opts.fromJson);
+            const config = loadConfig();
+            const client = createClient(config);
+            const workspace = opts.workspace ?? requireActiveWorkspace(config);
+            const dryRun = isDryRunEnabled();
+            const summary = await updateIssueBatch(
+              client,
+              {
+                workspace,
+                project: opts.project,
+                activeProjectId: config.context.activeProject,
+                activeProjectIdentifier: config.context.activeProjectIdentifier,
+              },
+              entries,
+              dryRun,
+            );
+            if (opts.json || dryRun) {
+              printJson(summary);
+            } else {
+              for (const entry of summary.results) {
+                const reference = entry.issueId
+                  ? `${entry.issue} (uuid: ${entry.issueId})`
+                  : entry.issue;
+                if (entry.status === "failed") printError(`${reference}: ${entry.error}`);
+                else printInfo(`Updated ${reference}`);
+              }
+              printInfo(`Updated ${summary.updated} issue(s). Failed ${summary.failed}.`);
+            }
+            if (summary.failed) process.exitCode = 1;
+            return;
+          }
+          if (issueRefArg === undefined) {
+            throw new ValidationError("Provide an issue ref or --from-json <file|->.");
+          }
           validateDescriptionInput(opts);
           const config = loadConfig();
           const client = createClient(config);
@@ -725,80 +681,43 @@ export function createIssueCommand(): Command {
             ),
           );
 
-          // Build non-project-specific parts of the body
-          const baseBody: Record<string, unknown> = {};
-          const titleValue = opts.title ?? opts.name;
-          if (titleValue) baseBody.name = titleValue;
-          if (opts.descriptionHtml !== undefined) baseBody.description_html = opts.descriptionHtml;
-          else if (opts.description !== undefined)
-            baseBody.description_html = `<p>${opts.description}</p>`;
-          if (opts.priority) baseBody.priority = opts.priority;
-          if (opts.due) baseBody.target_date = opts.due === "none" ? null : opts.due;
-          if (opts.start) baseBody.start_date = opts.start === "none" ? null : opts.start;
-
-          // Resolve assignees (workspace-scoped, same for all issues)
-          if (opts.assignee.length > 0) {
-            const ids = await Promise.all(
-              opts.assignee.map((a) =>
-                a.toLowerCase() === "me"
-                  ? resolveCurrentUserId(client)
-                  : resolveMember(client, ws, a),
-              ),
-            );
-            baseBody.assignees = ids;
-          }
+          const baseBody = await buildIssueUpdateBaseBody(client, ws, opts);
 
           // Resolve state and labels per unique project (handles cross-project bulk)
           const uniqueProjectIds = [...new Set(resolved.map((r) => r.projectId))];
 
           const stateIdByProject = new Map<string, string>();
           if (opts.state) {
+            const state = opts.state;
             await Promise.all(
               uniqueProjectIds.map(async (pid) => {
-                const stateRes = await client.get<unknown>(
-                  `workspaces/${ws}/projects/${pid}/states/`,
-                );
-                const states = unwrap<PlaneState>(stateRes);
-                const match = states.find(
-                  (s) => s.id === opts.state || s.name.toLowerCase() === opts.state!.toLowerCase(),
-                );
-                stateIdByProject.set(pid, match ? match.id : opts.state!);
+                stateIdByProject.set(pid, await resolveIssueUpdateState(client, ws, pid, state));
               }),
             );
           }
 
-          for (const lid of opts.labelId) {
-            if (!UUID_RE.test(lid)) {
-              throw new ValidationError(
-                `--label-id requires a UUID; got "${lid}". Use --label for name resolution.`,
-              );
-            }
-          }
+          validateIssueUpdateLabelIds(opts.labelId);
           const labelIdsByProject = new Map<string, string[]>();
           if (opts.label.length > 0 || opts.labelId.length > 0) {
             await Promise.all(
               uniqueProjectIds.map(async (pid) => {
-                const resolvedNames = await Promise.all(
-                  opts.label.map((l) => resolveLabel(client, ws, pid, l)),
+                labelIdsByProject.set(
+                  pid,
+                  await resolveIssueUpdateLabels(client, ws, pid, opts.label, opts.labelId),
                 );
-                labelIdsByProject.set(pid, [...new Set([...resolvedNames, ...opts.labelId])]);
               }),
             );
           }
 
           // Resolve parent (single-issue only)
-          if (opts.parent === "none") {
-            baseBody.parent = null;
-          } else if (opts.parent) {
-            const { issueId: parentId } = await resolveIssueRef(
+          if (opts.parent) {
+            baseBody.parent = await resolveIssueUpdateParent(
               client,
               ws,
-              resolved[0].projectId,
-              resolved[0].identifier,
+              resolved[0],
               style,
               opts.parent,
             );
-            baseBody.parent = parentId;
           }
 
           if (

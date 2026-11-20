@@ -45,7 +45,7 @@ Added support for the project-page operations documented at the time for Plane C
 
 ## 0.4.4
 
-Closes the two verification items left open by v0.4.3 (both implemented offline against documented field names, never confirmed live) plus one agent-facing discovery nicety. See [pages-support-root-cause.md](context/research/lessons-learned/pages-support-root-cause.md) and [production-use-gap-report.md](context/research/lessons-learned/production-use-gap-report.md).
+Closes the two verification items left open by v0.4.3 (both implemented offline against documented field names, never confirmed live) plus one agent-facing discovery nicety. The local research notes are `context/research/lessons-learned/pages-support-root-cause.md` and `context/research/lessons-learned/production-use-gap-report.md`.
 
 ### Polish
 - **`discover` advertises Plane Pages (un)support** — `discover context` and `discover issue-inputs` now include an additive `capabilities.pages` field (`{ supported, reason }`) so AI agents can skip the Pages surface instead of probing and hitting a 404. The probe is a lightweight, non-fatal GET of the project-pages endpoint: a 404 reports `supported: false`, a success reports `supported: true`, and any probe error (or no project in context) reports `supported: null` — the probe can never make `discover` fail, and `--json` output stays pure JSON.
@@ -56,7 +56,7 @@ Closes the two verification items left open by v0.4.3 (both implemented offline 
 
 ## 0.4.3
 
-Clears the actionable items from the 2026-07-10 production-use gap report. See [production-use-gap-report.md](context/research/lessons-learned/production-use-gap-report.md).
+Clears the actionable items from the 2026-07-10 production-use gap report. The local research note is `context/research/lessons-learned/production-use-gap-report.md`.
 
 ### Bug fixes
 - **Ambiguous sequence refs no longer resolve to the wrong issue** — `findIssueBySeq` picked the first of any issues sharing a `sequence_id` (real in migrated/imported projects) and mutated it while reporting success. It now aborts on duplicates, listing every candidate by UUID + state + title, and requires an unambiguous UUID. **P1 / data-integrity.**
@@ -78,7 +78,7 @@ Clears the actionable items from the 2026-07-10 production-use gap report. See [
 
 ## 0.4.2
 
-Stability + clean-workflow release. Clears confirmed open bugs and the missing idempotent label command, and hardens CI and the release process. (Shipped to `main`; see the git history and `docs/roadmap.md`.)
+Stability and workflow release. Clears confirmed open bugs, adds idempotent label creation, and hardens CI and the release process.
 
 ### Bug fixes
 - Fixed the doubled identifier on `issue close` / `reopen` / `delete` — confirmation strings now print `PROJ-N` once, derived from the resolved sequence id instead of the raw argument

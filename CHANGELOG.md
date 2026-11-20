@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+### Features
+
+- **Update issues from JSON** — `plane issue update --from-json <file|->` reads distinct updates from a JSON file or standard input and applies them in one process. The CLI validates the input before writing, reuses project and workspace lookups, and reports individual results in input order. `--dry-run` previews the requests. A failed row gives the command a nonzero exit status while other valid rows can succeed.
+
 ## 0.4.6
 
 Fixes the rewrite workflow gaps reported on 2026-10-20.
@@ -18,18 +24,18 @@ The v0.4.5 changes below were implemented locally but were not published separat
 
 ### Validation
 
-- **Validation:** 167 tests passed; 7 opt-in live tests skipped. Build, lint, formatting, and package install/smoke verification passed (installed version `0.4.6`). Regression tests cover outgoing HTML, empty updates, parent assignment/clearing, method selection, dry-run, errors, and no cross-method fallback. Live page PUT verification on the reporting instance remains pending; its version and endpoint were not supplied.
+- **Validation:** 167 tests passed and 7 opt-in live tests were skipped. The build, lint, formatting, and an offline install and smoke test of the v0.4.6 tarball passed. Regression tests cover outgoing HTML, empty updates, parent assignment and clearing, method selection, dry-run output, and error handling. A separate live check confirmed page updates via `PUT` on one configured Plane instance.
 
 ## 0.4.5 (included in 0.4.6)
 
-Makes the `page` command surface work against Plane's commercial API (Plane Cloud, Commercial/Airgapped Editions), which serves project pages on the token-authenticated `/api/v1` API, and makes the CLI honest about the two operations no edition's public API exposes (update/delete — [makeplane/plane#8598](https://github.com/makeplane/plane/issues/8598)). Community self-hosted instances keep the existing 404 behavior: they don't ship the endpoint at all. See [pages-support-root-cause.md](context/research/lessons-learned/pages-support-root-cause.md) (2026-10-09 addendum). Implemented against the documented API shapes with mocked-transport unit tests; live verification against a Cloud/Commercial instance is pending.
+Added support for the project-page operations documented at the time for Plane Cloud and Commercial/Airgapped editions on the token-authenticated `/api/v1` API. The Community self-hosted instance tested at the time returned 404. Mocked-transport tests cover the documented API behavior. Live verification against a Cloud or Commercial instance is pending.
 
 ### Features
 - **`plane page archive <page>` / `plane page unarchive <page>`** — the documented page lifecycle operations (`POST`/`DELETE …/pages/{id}/archive/`, 204 No Content responses; bodyless POST via a new internal `postVoid` client verb). Accepts name or UUID like `get` does, supports `--dry-run` and `--json` (success envelope `{ success, action, pageId, projectId, workspace }`), and is the supported alternative to delete.
 - **`page create` commercial-correct body** — the documented create endpoint requires `description_html`, so it is always sent (default `<p></p>` when no `--content`); a contentless create is no longer a 400 against commercial instances. New `--access <0|1>` option (0 = public, default; 1 = private), validated before any network call.
 
 ### Error Messages
-- **`page update` / `page delete` report the real limitation** — a 404/405 on those routes now wraps into a message stating that Plane's public API does not expose page update/delete on any edition, pointing at `plane page archive` and upstream issue #8598, instead of a misleading "page not found". The request is still attempted first, so an instance running a Plane version that merges the upstream PRs (#8669/#8865/#9528) keeps working with zero CLI changes; other statuses propagate untouched. `--help` descriptions updated to match.
+- **`page update` / `page delete` diagnostics** — added specific messages for 404 and 405 responses based on the API documentation available at the time. The v0.4.6 behavior above supersedes those messages. [Original upstream issue](https://github.com/makeplane/plane/issues/8598)
 
 ### Polish
 - **`capabilities.pages` reports the operation level** — when the pages probe succeeds, `discover context`/`issue-inputs` include `operations: ["list", "get", "create", "archive"]` (static per the documented public API; `archive` covers both directions of the archive/unarchive sub-endpoint); unsupported/unknown keeps `{ supported, reason }` plus `operations: []` for schema stability.

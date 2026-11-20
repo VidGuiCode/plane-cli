@@ -7,6 +7,8 @@ import { ask } from "../core/prompt.js";
 import { exitWithError, getErrorMessage, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
+import { assertIssueUpdateRoundTrip, buildIssueUpdateBaseBody, resolveIssueUpdateLabels, resolveIssueUpdateParent, resolveIssueUpdateState, validateIssueUpdateLabelIds, } from "../core/issue-update.js";
+import { hasIssueUpdateFlags, readIssueUpdateBatch, updateIssueBatch, } from "../core/issue-update-batch.js";
 import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveLabel, resolveModule, resolveCycle, resolveCurrentUserId, normalizeIssue, projectIssueFields, findUnknownFields, UUID_RE, } from "../core/resolvers.js";
 /**
  * Warn (on stderr, keeping stdout pure JSON) when `--fields` contains names that
@@ -20,95 +22,12 @@ function warnUnknownFields(normalized, fieldsCsv) {
     const valid = Object.keys(normalized).sort().join(", ");
     console.error(`Warning: ignoring unknown --fields name(s): ${unknown.join(", ")}. Valid fields: ${valid}`);
 }
-function stateIdFromIssue(issue) {
-    if (typeof issue.state === "string")
-        return issue.state;
-    if (issue.state && typeof issue.state === "object" && "id" in issue.state) {
-        return String(issue.state.id);
-    }
-    if (issue.state_detail && typeof issue.state_detail === "object" && "id" in issue.state_detail) {
-        return String(issue.state_detail.id);
-    }
-    return null;
-}
-function labelIdsFromIssue(issue) {
-    if (Array.isArray(issue.label_ids))
-        return issue.label_ids.map(String);
-    return (issue.labels ?? [])
-        .map((label) => {
-        if (typeof label === "string")
-            return label;
-        if (label && typeof label === "object" && "id" in label)
-            return String(label.id);
-        return null;
-    })
-        .filter((label) => Boolean(label));
-}
-function descriptionMatches(issue, expectedHtml) {
-    const expectedText = stripHtml(expectedHtml);
-    const candidates = [
-        issue.description_html,
-        issue.description_stripped,
-        issue.description,
-    ].filter((value) => typeof value === "string");
-    // Empty updates must actually clear the content; every string includes "".
-    return candidates.some((candidate) => expectedText === "" ? stripHtml(candidate) === "" : stripHtml(candidate).includes(expectedText));
-}
 function validateDescriptionInput(opts) {
     if (opts.description !== undefined && opts.descriptionHtml !== undefined) {
         throw new ValidationError("--description and --description-html are mutually exclusive.");
     }
 }
-function arrayContainsAll(actual, expected) {
-    if (!Array.isArray(actual) || !Array.isArray(expected))
-        return false;
-    const actualSet = new Set(actual.map(String));
-    return expected.map(String).every((value) => actualSet.has(value));
-}
-export function assertIssueUpdateRoundTrip(issue, body) {
-    const mismatches = [];
-    for (const [field, expected] of Object.entries(body)) {
-        if (field === "name" && issue.name !== expected) {
-            mismatches.push({ field, expected, actual: issue.name });
-        }
-        else if (field === "description_html" &&
-            typeof expected === "string" &&
-            !descriptionMatches(issue, expected)) {
-            mismatches.push({
-                field,
-                expected: stripHtml(expected),
-                actual: issue.description_stripped ?? issue.description_html ?? null,
-            });
-        }
-        else if (field === "priority" && issue.priority !== expected) {
-            mismatches.push({ field, expected, actual: issue.priority });
-        }
-        else if (field === "state" && stateIdFromIssue(issue) !== expected) {
-            mismatches.push({ field, expected, actual: stateIdFromIssue(issue) });
-        }
-        else if (field === "assignees" && !arrayContainsAll(issue.assignees, expected)) {
-            mismatches.push({ field, expected, actual: issue.assignees ?? [] });
-        }
-        else if (field === "labels" && !arrayContainsAll(labelIdsFromIssue(issue), expected)) {
-            mismatches.push({ field, expected, actual: labelIdsFromIssue(issue) });
-        }
-        else if (field === "parent" && issue.parent !== expected) {
-            mismatches.push({ field, expected, actual: issue.parent ?? null });
-        }
-        else if (field === "target_date" && issue.target_date !== expected) {
-            mismatches.push({ field, expected, actual: issue.target_date ?? null });
-        }
-        else if (field === "start_date" && issue.start_date !== expected) {
-            mismatches.push({ field, expected, actual: issue.start_date ?? null });
-        }
-    }
-    if (mismatches.length > 0) {
-        const summary = mismatches
-            .map((mismatch) => `${mismatch.field}: expected ${JSON.stringify(mismatch.expected)}, got ${JSON.stringify(mismatch.actual)}`)
-            .join("; ");
-        throw new ValidationError(`Plane API did not confirm requested issue update fields (${summary}). The update may have been silently ignored by this API version.`);
-    }
-}
+export { assertIssueUpdateRoundTrip } from "../core/issue-update.js";
 export function createIssueCommand() {
     const command = new Command("issue")
         .description("Work with Plane issues")
@@ -461,8 +380,9 @@ export function createIssueCommand() {
     });
     // ── update ────────────────────────────────────────────────────────────────
     command
-        .command("update <issue>")
-        .description("Update one or more issues. Accepts comma-separated refs: PROJ-1,2,3")
+        .command("update [issue]")
+        .description("Update comma-separated issue refs (PROJ-1,2,3) or apply per-issue changes from JSON")
+        .option("--from-json <file|->", "Read a batch of issue updates from a JSON file or stdin")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--title <title>", "New title")
@@ -480,6 +400,43 @@ export function createIssueCommand() {
         .option("--json", "Output raw JSON")
         .action(async (issueRefArg, opts) => {
         try {
+            if (opts.fromJson !== undefined) {
+                if (issueRefArg !== undefined || hasIssueUpdateFlags(opts)) {
+                    throw new ValidationError("--from-json cannot be combined with an issue argument or update flags.");
+                }
+                const entries = readIssueUpdateBatch(opts.fromJson);
+                const config = loadConfig();
+                const client = createClient(config);
+                const workspace = opts.workspace ?? requireActiveWorkspace(config);
+                const dryRun = isDryRunEnabled();
+                const summary = await updateIssueBatch(client, {
+                    workspace,
+                    project: opts.project,
+                    activeProjectId: config.context.activeProject,
+                    activeProjectIdentifier: config.context.activeProjectIdentifier,
+                }, entries, dryRun);
+                if (opts.json || dryRun) {
+                    printJson(summary);
+                }
+                else {
+                    for (const entry of summary.results) {
+                        const reference = entry.issueId
+                            ? `${entry.issue} (uuid: ${entry.issueId})`
+                            : entry.issue;
+                        if (entry.status === "failed")
+                            printError(`${reference}: ${entry.error}`);
+                        else
+                            printInfo(`Updated ${reference}`);
+                    }
+                    printInfo(`Updated ${summary.updated} issue(s). Failed ${summary.failed}.`);
+                }
+                if (summary.failed)
+                    process.exitCode = 1;
+                return;
+            }
+            if (issueRefArg === undefined) {
+                throw new ValidationError("Provide an issue ref or --from-json <file|->.");
+            }
             validateDescriptionInput(opts);
             const config = loadConfig();
             const client = createClient(config);
@@ -506,58 +463,26 @@ export function createIssueCommand() {
             }
             // Resolve all refs up-front — fail before sending any API calls
             const resolved = await Promise.all(refs.map((ref) => resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, ref)));
-            // Build non-project-specific parts of the body
-            const baseBody = {};
-            const titleValue = opts.title ?? opts.name;
-            if (titleValue)
-                baseBody.name = titleValue;
-            if (opts.descriptionHtml !== undefined)
-                baseBody.description_html = opts.descriptionHtml;
-            else if (opts.description !== undefined)
-                baseBody.description_html = `<p>${opts.description}</p>`;
-            if (opts.priority)
-                baseBody.priority = opts.priority;
-            if (opts.due)
-                baseBody.target_date = opts.due === "none" ? null : opts.due;
-            if (opts.start)
-                baseBody.start_date = opts.start === "none" ? null : opts.start;
-            // Resolve assignees (workspace-scoped, same for all issues)
-            if (opts.assignee.length > 0) {
-                const ids = await Promise.all(opts.assignee.map((a) => a.toLowerCase() === "me"
-                    ? resolveCurrentUserId(client)
-                    : resolveMember(client, ws, a)));
-                baseBody.assignees = ids;
-            }
+            const baseBody = await buildIssueUpdateBaseBody(client, ws, opts);
             // Resolve state and labels per unique project (handles cross-project bulk)
             const uniqueProjectIds = [...new Set(resolved.map((r) => r.projectId))];
             const stateIdByProject = new Map();
             if (opts.state) {
+                const state = opts.state;
                 await Promise.all(uniqueProjectIds.map(async (pid) => {
-                    const stateRes = await client.get(`workspaces/${ws}/projects/${pid}/states/`);
-                    const states = unwrap(stateRes);
-                    const match = states.find((s) => s.id === opts.state || s.name.toLowerCase() === opts.state.toLowerCase());
-                    stateIdByProject.set(pid, match ? match.id : opts.state);
+                    stateIdByProject.set(pid, await resolveIssueUpdateState(client, ws, pid, state));
                 }));
             }
-            for (const lid of opts.labelId) {
-                if (!UUID_RE.test(lid)) {
-                    throw new ValidationError(`--label-id requires a UUID; got "${lid}". Use --label for name resolution.`);
-                }
-            }
+            validateIssueUpdateLabelIds(opts.labelId);
             const labelIdsByProject = new Map();
             if (opts.label.length > 0 || opts.labelId.length > 0) {
                 await Promise.all(uniqueProjectIds.map(async (pid) => {
-                    const resolvedNames = await Promise.all(opts.label.map((l) => resolveLabel(client, ws, pid, l)));
-                    labelIdsByProject.set(pid, [...new Set([...resolvedNames, ...opts.labelId])]);
+                    labelIdsByProject.set(pid, await resolveIssueUpdateLabels(client, ws, pid, opts.label, opts.labelId));
                 }));
             }
             // Resolve parent (single-issue only)
-            if (opts.parent === "none") {
-                baseBody.parent = null;
-            }
-            else if (opts.parent) {
-                const { issueId: parentId } = await resolveIssueRef(client, ws, resolved[0].projectId, resolved[0].identifier, style, opts.parent);
-                baseBody.parent = parentId;
+            if (opts.parent) {
+                baseBody.parent = await resolveIssueUpdateParent(client, ws, resolved[0], style, opts.parent);
             }
             if (Object.keys(baseBody).length === 0 &&
                 !opts.state &&

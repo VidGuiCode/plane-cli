@@ -1,7 +1,7 @@
-import type { PlaneApiClient } from "./api-client.js";
+import type { PlaneApiClient, PlaneReadClient } from "./api-client.js";
 import type { PlaneIssue, PlaneState, PlaneMember } from "./types.js";
 export declare const UUID_RE: RegExp;
-export declare function resolveProject(client: PlaneApiClient, ws: string, ref: string): Promise<{
+export declare function resolveProject(client: PlaneReadClient, ws: string, ref: string): Promise<{
     id: string;
     identifier: string;
     name: string;
@@ -18,7 +18,7 @@ type IssueRef = {
     seq: number;
 };
 export declare function parseIssueRef(ref: string): IssueRef;
-export declare function resolveIssueRef(client: PlaneApiClient, ws: string, activeProjectId: string | undefined, activeProjectIdentifier: string | undefined, style: string, ref: string): Promise<{
+export declare function resolveIssueRef(client: PlaneReadClient, ws: string, activeProjectId: string | undefined, activeProjectIdentifier: string | undefined, style: string, ref: string): Promise<{
     issueId: string;
     projectId: string;
     identifier: string;
@@ -27,7 +27,7 @@ export declare function resolveIssueRef(client: PlaneApiClient, ws: string, acti
 export declare function buildStateMap(states: PlaneState[]): Map<string, string>;
 export declare function resolveState(issue: PlaneIssue, stateMap: Map<string, string>): string;
 /** Fetch the authenticated user's ID via /users/me/. */
-export declare function resolveCurrentUserId(client: PlaneApiClient): Promise<string>;
+export declare function resolveCurrentUserId(client: PlaneReadClient): Promise<string>;
 /** Extract display name — handles all known Plane API member shapes. */
 export declare function getMemberDisplayName(m: PlaneMember): string;
 /** Extract email — handles all known Plane API member shapes. */
@@ -45,7 +45,7 @@ export declare function getMemberRole(m: PlaneMember): number | undefined;
  * Nested object → member.id; string member field → that string; fallback → top-level id.
  */
 export declare function getMemberId(m: PlaneMember): string;
-export declare function resolveMember(client: PlaneApiClient, ws: string, nameOrEmail: string): Promise<string>;
+export declare function resolveMember(client: PlaneReadClient, ws: string, nameOrEmail: string): Promise<string>;
 export declare function resolveCycle(client: PlaneApiClient, ws: string, projectId: string, nameOrId: string): Promise<{
     id: string;
     name: string;
@@ -69,6 +69,6 @@ export declare function projectIssueFields(normalized: Record<string, unknown>, 
  * scripts; callers use this to warn (on stderr) instead of failing silently.
  */
 export declare function findUnknownFields(normalized: Record<string, unknown>, fieldsCsv: string): string[];
-export declare function resolveLabel(client: PlaneApiClient, ws: string, projectId: string, nameOrColor: string): Promise<string>;
+export declare function resolveLabel(client: PlaneReadClient, ws: string, projectId: string, nameOrColor: string): Promise<string>;
 export {};
 //# sourceMappingURL=resolvers.d.ts.map

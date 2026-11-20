@@ -95,6 +95,33 @@ plane issue update PROJ-42 --parent none
 
 Page update defaults to `PUT`, which accepts a title, content, or both; content replaces the whole page body. Omitted fields are not sent. For older instances that require PATCH, pass `--method PATCH`. Dry-run previews the selected method; the CLI never falls back to another method automatically. Parent changes, including clearing, accept a single issue only.
 
+### Update issues from JSON (v0.5.0)
+
+Use `--from-json` to update multiple issues with different field values in one command. Pass a file path or use `-` to read from standard input.
+
+```bash
+plane issue update --from-json updates.json --dry-run
+plane issue update --from-json - --json < updates.json
+```
+
+The input is a nonempty JSON array. Each object requires `issue` and at least one update field. All fields take strings except `assignee`, `label`, and `labelId`, which take nonempty arrays of nonblank strings.
+
+| Field | Value |
+|---|---|
+| `issue` | A single issue ref, such as a project-qualified ref, a sequence number in the active project, or a UUID, written as a string. |
+| `title`, `name` | Replacement issue title. `title` takes precedence when both are supplied. |
+| `description`, `descriptionHtml` | Text or raw HTML. Use one of these fields. An empty string clears the description. |
+| `priority` | `urgent`, `high`, `medium`, `low`, or `none`. |
+| `state` | State name or ID in the issue's project. |
+| `assignee` | Assignee names, emails, or `me`. |
+| `label`, `labelId` | Label names or UUIDs. The supplied labels replace the existing set. |
+| `parent` | Parent issue ref or `none` to clear it. |
+| `due`, `start` | Dates in `YYYY-MM-DD` format or `none` to clear the date. |
+
+Use `--workspace` and `--project` to set the context for the batch. `--from-json` is mutually exclusive with a positional issue ref and individual update flags. Invalid input structure stops the entire batch before writes begin. If an issue resolves more than once, each row targeting it fails. Other rows can proceed when a row fails to resolve or update. Any failed row gives the command a nonzero exit status. The CLI checks the response after each PATCH, so a verification failure can occur after the server has applied changes.
+
+`--json` returns `updated` and `failed` counts and a `results` array in input order. Each result includes `issue`, `status` (`updated`, `failed`, or `planned`), and any resolved `issueId` and `projectId`. Failed rows include `error`. `--dry-run` always returns JSON, leaves `updated` at zero, and shows the `method`, `path`, and `body` for each `planned` row without sending the PATCH requests.
+
 <details>
 <summary><strong>Global flags</strong></summary>
 

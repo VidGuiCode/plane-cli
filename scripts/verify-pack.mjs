@@ -69,6 +69,8 @@ try {
   for (const sub of ["list", "get", "create", "update", "delete", "close", "reopen", "open", "mine"]) {
     assertIncludes(issueHelp, sub, `issue ${sub}`);
   }
+  const issueUpdateHelp = run(plane, ["issue", "update", "--help"], { cwd: dir, capture: true });
+  assertIncludes(issueUpdateHelp, "--from-json", "issue update --from-json");
 
   const cycleHelp = run(plane, ["cycle", "--help"], { cwd: dir, capture: true });
   for (const sub of ["list", "issues", "current", "create", "ensure", "add", "delete"]) {

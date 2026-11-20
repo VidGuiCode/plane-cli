@@ -8,7 +8,6 @@ Release targets are provisional and may change with usage and feedback.
 
 | Target | Work | Scope |
 | --- | --- | --- |
-| After v0.5.0 | On-disk resolver cache | Reuse project, state, member, and label lookups across CLI runs. Design expiry, invalidation after a 404 or name miss, and an opt-out. |
 | v0.6.0 | Bulk issue creation | Read JSON or YAML with `issue bulk-create --file`. Add `--dry-run` and `--validate-only` to report missing resources and invalid assignees, states, or dates before writing. |
 | v0.6.0 | Missing-label handling | Add `--create-labels`, `--ignore-missing-labels`, and `--validate-only` to issue creation and bulk import, using shared preflight validation. |
 | v0.6.0 | Descriptions from files | Read long descriptions from `--description-file <path>` or stdin (`-`) on issue create and update, with support for bulk specs. |
@@ -24,6 +23,7 @@ Release targets are provisional and may change with usage and feedback.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.5.1](../CHANGELOG.md#051) | Reuse resolver lookups across CLI runs, with expiry, refresh on a name miss, and an opt-out. [Resolver cache](architecture.md#resolver-cache) |
 | [v0.5.0](../CHANGELOG.md#050) | Apply distinct updates to multiple issues in one process. [Batch input and output](automation.md#update-issues-from-json) |
 | [v0.4.6](../CHANGELOG.md#046) | Pass raw HTML, clear issue parents, resolve project UUIDs, and update pages with `PUT`. Includes the v0.4.5 page archive and discovery work. |
 | [v0.4.4](../CHANGELOG.md#044) | Report page availability in discovery and verify module lead and member role fields against a live instance. |

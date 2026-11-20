@@ -61,6 +61,7 @@ try {
 
   const help = run(plane, ["--help"], { cwd: dir, capture: true });
   assertIncludes(help, "Commands", "help");
+  assertIncludes(help, "--no-resolver-cache", "resolver cache opt-out");
   for (const cmd of ["issue", "cycle", "module", "workspace", "project", "profile", "discover"]) {
     assertIncludes(help, cmd, cmd);
   }

@@ -67,11 +67,14 @@ try {
   }
 
   const issueHelp = run(plane, ["issue", "--help"], { cwd: dir, capture: true });
-  for (const sub of ["list", "get", "create", "update", "delete", "close", "reopen", "open", "mine"]) {
+  for (const sub of ["list", "get", "create", "bulk-create", "update", "delete", "close", "reopen", "open", "mine"]) {
     assertIncludes(issueHelp, sub, `issue ${sub}`);
   }
   const issueUpdateHelp = run(plane, ["issue", "update", "--help"], { cwd: dir, capture: true });
   assertIncludes(issueUpdateHelp, "--from-json", "issue update --from-json");
+  assertIncludes(issueUpdateHelp, "--description-file", "issue update --description-file");
+  const bulkCreateHelp = run(plane, ["issue", "bulk-create", "--help"], { cwd: dir, capture: true });
+  assertIncludes(bulkCreateHelp, "--validate-only", "issue bulk-create --validate-only");
 
   const cycleHelp = run(plane, ["cycle", "--help"], { cwd: dir, capture: true });
   for (const sub of ["list", "issues", "current", "create", "ensure", "add", "delete"]) {

@@ -4,14 +4,6 @@
 
 Release targets are provisional and may change with usage and feedback.
 
-## Planned
-
-| Target | Work | Scope |
-| --- | --- | --- |
-| v0.6.0 | Bulk issue creation | Read JSON or YAML with `issue bulk-create --file`. Add `--dry-run` and `--validate-only` to report missing resources and invalid assignees, states, or dates before writing. |
-| v0.6.0 | Missing-label handling | Add `--create-labels`, `--ignore-missing-labels`, and `--validate-only` to issue creation and bulk import, using shared preflight validation. |
-| v0.6.0 | Descriptions from files | Read long descriptions from `--description-file <path>` or stdin (`-`) on issue create and update, with support for bulk specs. |
-
 ## Unscheduled
 
 | Idea | Scope |
@@ -23,6 +15,7 @@ Release targets are provisional and may change with usage and feedback.
 
 | Version | Highlights |
 | --- | --- |
+| [v0.6.0](../CHANGELOG.md#060) | Import issues from JSON or YAML, validate issues and handle missing labels before creation, and read descriptions from files or stdin. [Bulk creation](automation.md#create-issues-from-json-or-yaml) |
 | [v0.5.1](../CHANGELOG.md#051) | Reuse resolver lookups across CLI runs, with expiry, refresh on a name miss, and an opt-out. [Resolver cache](architecture.md#resolver-cache) |
 | [v0.5.0](../CHANGELOG.md#050) | Apply distinct updates to multiple issues in one process. [Batch input and output](automation.md#update-issues-from-json) |
 | [v0.4.6](../CHANGELOG.md#046) | Pass raw HTML, clear issue parents, resolve project UUIDs, and update pages with `PUT`. Includes the v0.4.5 page archive and discovery work. |

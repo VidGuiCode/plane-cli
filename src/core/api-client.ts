@@ -297,6 +297,21 @@ export class PlaneApiClient {
 export type PlaneReadClient = Pick<PlaneApiClient, "get"> &
   Partial<Pick<PlaneApiClient, "resolveLookup">>;
 
+export function cacheBatchReads(client: PlaneApiClient): PlaneReadClient {
+  const reads = new Map<string, Promise<unknown>>();
+  return {
+    resolveLookup: client.resolverCache ? client.resolveLookup.bind(client) : undefined,
+    get<T>(path: string): Promise<T> {
+      let read = reads.get(path);
+      if (!read) {
+        read = client.get(path);
+        reads.set(path, read);
+      }
+      return read as Promise<T>;
+    },
+  };
+}
+
 export async function findInResolverList<T, R>(
   client: PlaneReadClient,
   path: string,

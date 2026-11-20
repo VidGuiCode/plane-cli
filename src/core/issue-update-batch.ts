@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { PlaneApiClient, PlaneReadClient } from "./api-client.js";
+import { cacheBatchReads, type PlaneApiClient } from "./api-client.js";
 import { getErrorMessage, ValidationError } from "./errors.js";
 import {
   assertIssueUpdateRoundTrip,
@@ -51,6 +51,7 @@ type BatchResult =
 
 export function hasIssueUpdateFlags(fields: IssueUpdateFields): boolean {
   return (
+    fields.descriptionFile !== undefined ||
     stringFields.some((field) => fields[field] !== undefined) ||
     arrayFields.some((field) => Boolean(fields[field]?.length))
   );
@@ -112,21 +113,6 @@ export function readIssueUpdateBatch(source: string): BatchEntry[] {
     }
     return { ...row, issue: row.issue.trim() };
   });
-}
-
-function cacheBatchReads(client: PlaneApiClient): PlaneReadClient {
-  const reads = new Map<string, Promise<unknown>>();
-  return {
-    resolveLookup: client.resolverCache ? client.resolveLookup.bind(client) : undefined,
-    get<T>(path: string): Promise<T> {
-      let read = reads.get(path);
-      if (!read) {
-        read = client.get(path);
-        reads.set(path, read);
-      }
-      return read as Promise<T>;
-    },
-  };
 }
 
 async function mapBatchRows<T, R>(rows: readonly T[], apply: (row: T) => Promise<R>): Promise<R[]> {

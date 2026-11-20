@@ -2,6 +2,7 @@ import type { PlaneReadClient } from "./api-client.js";
 import { findInResolverList } from "./api-client.js";
 import { ValidationError } from "./errors.js";
 import { stripHtml } from "./html.js";
+import { readIssueDescription, type IssueDescription } from "./issue-description.js";
 import {
   resolveCurrentUserId,
   resolveIssueRef,
@@ -11,11 +12,9 @@ import {
 } from "./resolvers.js";
 import type { PlaneIssue, PlaneState } from "./types.js";
 
-export interface IssueUpdateFields {
+export interface IssueUpdateFields extends IssueDescription {
   title?: string;
   name?: string;
-  description?: string;
-  descriptionHtml?: string;
   priority?: string;
   state?: string;
   assignee?: string[];
@@ -34,8 +33,8 @@ export async function buildIssueUpdateBaseBody(
   const body: Record<string, unknown> = {};
   const title = fields.title ?? fields.name;
   if (title) body.name = title;
-  if (fields.descriptionHtml !== undefined) body.description_html = fields.descriptionHtml;
-  else if (fields.description !== undefined) body.description_html = `<p>${fields.description}</p>`;
+  const description = readIssueDescription(fields);
+  if (description !== undefined) body.description_html = description;
   if (fields.priority) body.priority = fields.priority;
   if (fields.due) body.target_date = fields.due === "none" ? null : fields.due;
   if (fields.start) body.start_date = fields.start === "none" ? null : fields.start;

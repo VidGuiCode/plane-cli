@@ -1,10 +1,9 @@
 import type { PlaneReadClient } from "./api-client.js";
+import { type IssueDescription } from "./issue-description.js";
 import type { PlaneIssue } from "./types.js";
-export interface IssueUpdateFields {
+export interface IssueUpdateFields extends IssueDescription {
     title?: string;
     name?: string;
-    description?: string;
-    descriptionHtml?: string;
     priority?: string;
     state?: string;
     assignee?: string[];

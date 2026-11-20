@@ -76,6 +76,43 @@ With `--json`, the batch returns `updated` and `failed` counts plus `results` in
 
 Dry runs always return JSON and leave `updated` at zero. Each `planned` row includes the proposed `method`, `path`, and `body`.
 
+## Create issues from JSON or YAML
+
+Save a nonempty array of issue specs in a JSON or YAML file. All rows use the project selected with `--project` or the active project. Use `--file -` to read the array from stdin.
+
+```yaml
+- title: Review release notes
+  descriptionFile: release-notes.txt
+  state: Todo
+  assignee: [me]
+  label: [Documentation]
+  due: 2027-01-15
+- title: Verify the release build
+  description: Run the smoke tests against the packaged CLI.
+  priority: high
+```
+
+```bash
+plane issue bulk-create --project PROJ --file issues.yaml --validate-only
+plane issue bulk-create --project PROJ --file issues.yaml --create-labels --dry-run
+plane issue bulk-create --project PROJ --file issues.yaml --create-labels --json
+```
+
+| Field | Value |
+| --- | --- |
+| `title` | Required nonblank string. |
+| `description`, `descriptionHtml`, `descriptionFile` | Choose one of inline text, raw HTML, and a UTF-8 plain-text file. Relative file paths are based on the spec file's directory, or the current directory for specs from stdin. |
+| `priority` | `urgent`, `high`, `medium`, `low`, or `none`. |
+| `state` | State name or ID in the selected project. |
+| `assignee` | Array of workspace member names, emails, or `me`. |
+| `label`, `labelId` | Arrays of label names or UUIDs. |
+| `parent`, `module`, `cycle` | Existing parent issue ref, module name or UUID, or cycle name or UUID. |
+| `due`, `start` | Dates in `YYYY-MM-DD` format. |
+
+Bulk creation validates all rows before writing any labels or issues. By default, missing labels fail validation. `--create-labels` creates each missing named label once per batch, and `--ignore-missing-labels` skips missing names. Explicit label UUIDs must exist. Both `--validate-only` and `--dry-run` return JSON with row results and proposed requests.
+
+The JSON summary includes `created`, `failed`, and `results` in input order. Failed rows cause exit code `1`. If Plane rejects a write after preflight, other rows can still succeed and labels created earlier can persist. When a membership write fails after issue creation, the result is `partial` and includes the issue ID. Use the row results to identify what to retry.
+
 ## Repeatable project setup
 
 `ensure` returns a case-insensitive name match or creates the resource if it is missing. Module and cycle assignment commands accept comma-separated issue refs.

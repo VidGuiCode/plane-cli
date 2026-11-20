@@ -229,6 +229,20 @@ export class PlaneApiClient {
         return res.json();
     }
 }
+export function cacheBatchReads(client) {
+    const reads = new Map();
+    return {
+        resolveLookup: client.resolverCache ? client.resolveLookup.bind(client) : undefined,
+        get(path) {
+            let read = reads.get(path);
+            if (!read) {
+                read = client.get(path);
+                reads.set(path, read);
+            }
+            return read;
+        },
+    };
+}
 export async function findInResolverList(client, path, select) {
     return client.resolveLookup
         ? client.resolveLookup(path, select)

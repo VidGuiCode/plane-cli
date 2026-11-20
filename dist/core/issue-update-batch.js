@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { cacheBatchReads } from "./api-client.js";
 import { getErrorMessage, ValidationError } from "./errors.js";
 import { assertIssueUpdateRoundTrip, buildIssueUpdateBaseBody, resolveIssueUpdateLabels, resolveIssueUpdateParent, resolveIssueUpdateState, validateIssueUpdateLabelIds, } from "./issue-update.js";
 import { resolveIssueRef, resolveProject } from "./resolvers.js";
@@ -18,7 +19,8 @@ const updateFields = [...stringFields, ...arrayFields];
 const allowedFields = new Set(["issue", ...updateFields]);
 const maxConcurrentRows = 4;
 export function hasIssueUpdateFlags(fields) {
-    return (stringFields.some((field) => fields[field] !== undefined) ||
+    return (fields.descriptionFile !== undefined ||
+        stringFields.some((field) => fields[field] !== undefined) ||
         arrayFields.some((field) => Boolean(fields[field]?.length)));
 }
 export function readIssueUpdateBatch(source) {
@@ -74,20 +76,6 @@ export function readIssueUpdateBatch(source) {
         }
         return { ...row, issue: row.issue.trim() };
     });
-}
-function cacheBatchReads(client) {
-    const reads = new Map();
-    return {
-        resolveLookup: client.resolverCache ? client.resolveLookup.bind(client) : undefined,
-        get(path) {
-            let read = reads.get(path);
-            if (!read) {
-                read = client.get(path);
-                reads.set(path, read);
-            }
-            return read;
-        },
-    };
 }
 async function mapBatchRows(rows, apply) {
     const results = [];

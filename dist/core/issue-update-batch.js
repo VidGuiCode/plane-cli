@@ -78,6 +78,7 @@ export function readIssueUpdateBatch(source) {
 function cacheBatchReads(client) {
     const reads = new Map();
     return {
+        resolveLookup: client.resolverCache ? client.resolveLookup.bind(client) : undefined,
         get(path) {
             let read = reads.get(path);
             if (!read) {

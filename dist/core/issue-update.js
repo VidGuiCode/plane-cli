@@ -1,4 +1,4 @@
-import { unwrap } from "./api-client.js";
+import { findInResolverList } from "./api-client.js";
 import { ValidationError } from "./errors.js";
 import { stripHtml } from "./html.js";
 import { resolveCurrentUserId, resolveIssueRef, resolveLabel, resolveMember, UUID_RE, } from "./resolvers.js";
@@ -25,9 +25,8 @@ export async function buildIssueUpdateBaseBody(client, workspace, fields) {
     return body;
 }
 export async function resolveIssueUpdateState(client, workspace, projectId, state) {
-    const response = await client.get(`workspaces/${workspace}/projects/${projectId}/states/`);
-    const states = unwrap(response);
-    const match = states.find((candidate) => candidate.id === state || candidate.name.toLowerCase() === state.toLowerCase());
+    const lower = state.toLowerCase();
+    const match = await findInResolverList(client, `workspaces/${workspace}/projects/${projectId}/states/`, (states) => states.find((candidate) => candidate.id === state || candidate.name.toLowerCase() === lower));
     return match?.id ?? state;
 }
 export function validateIssueUpdateLabelIds(labelIds) {

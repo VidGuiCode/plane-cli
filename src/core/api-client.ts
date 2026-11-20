@@ -1,7 +1,10 @@
+import type { ResolverCache } from "./resolver-cache.js";
+
 export interface PlaneClientOptions {
   baseUrl: string;
   token: string;
   apiStyle: "issues" | "work-items";
+  resolverCache?: ResolverCache;
   retries?: number;
   retryDelay?: number;
 }
@@ -53,6 +56,18 @@ export class PlaneApiClient {
 
   get token(): string {
     return this.options.token;
+  }
+
+  get resolverCache(): ResolverCache | undefined {
+    return this.options.resolverCache;
+  }
+
+  async resolveLookup<T, R>(
+    path: string,
+    select: (rows: T[]) => R | undefined,
+  ): Promise<R | undefined> {
+    const load = async () => unwrap<T>(await this.get<unknown>(path));
+    return this.resolverCache ? this.resolverCache.find(path, load, select) : select(await load());
   }
 
   issuesSegment(): string {
@@ -114,6 +129,7 @@ export class PlaneApiClient {
 
         // Success or non-retryable error
         if (res.ok || !this.isRetryableError(res.status)) {
+          this.resolverCache?.observeResponse(path, options.method ?? "GET", res.status);
           return res;
         }
 
@@ -278,7 +294,18 @@ export class PlaneApiClient {
   }
 }
 
-export type PlaneReadClient = Pick<PlaneApiClient, "get">;
+export type PlaneReadClient = Pick<PlaneApiClient, "get"> &
+  Partial<Pick<PlaneApiClient, "resolveLookup">>;
+
+export async function findInResolverList<T, R>(
+  client: PlaneReadClient,
+  path: string,
+  select: (rows: T[]) => R | undefined,
+): Promise<R | undefined> {
+  return client.resolveLookup
+    ? client.resolveLookup(path, select)
+    : select(unwrap<T>(await client.get<unknown>(path)));
+}
 
 export async function fetchAll<T>(client: PlaneReadClient, path: string): Promise<T[]> {
   const sep = path.includes("?") ? "&" : "?";

@@ -23,7 +23,7 @@
 Install the `plane` command from a [GitHub release](https://github.com/VidGuiCode/plane-cli/releases).
 
 ```bash
-npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.5.0/plane-cli-0.5.0.tgz
+npm install -g https://github.com/VidGuiCode/plane-cli/releases/download/v0.5.1/plane-cli-0.5.1.tgz
 plane --version
 ```
 

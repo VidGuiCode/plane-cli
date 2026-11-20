@@ -27,4 +27,6 @@ Run `plane login` and enter the Plane instance URL and API token when prompted. 
 
 Plane CLI saves accounts, API tokens, and context in `~/.plane-cli/config.json`. Keep this file private. `PLANE_CONFIG` selects a different location. In CI and containers, use [environment-based authentication](automation.md#authentication-for-ci) to run commands without saving a token with `plane login`.
 
+Saved accounts reuse resolver lookup lists from the `resolver-cache` directory next to the config file. Pass `--no-resolver-cache` to bypass the cache for a command. [Resolver cache details](architecture.md#resolver-cache)
+
 Run `plane logout` to remove the active saved account or `plane logout <account>` to remove a named account. Use `npm uninstall -g plane-cli` to remove the command.

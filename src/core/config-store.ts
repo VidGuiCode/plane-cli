@@ -4,6 +4,8 @@ import fs from "node:fs";
 import type { PlaneConfig, PlaneAccount } from "./types.js";
 import { PlaneApiClient } from "./api-client.js";
 import { printError } from "./output.js";
+import { ResolverCache } from "./resolver-cache.js";
+import { hasArg } from "./runtime.js";
 
 export const DEFAULT_CONFIG: PlaneConfig = {
   profiles: [],
@@ -113,9 +115,15 @@ export function createClient(config: PlaneConfig): PlaneApiClient {
   }
 
   const account = requireActiveAccount(config);
+  const baseUrl = envUrl ?? account.baseUrl;
+  const token = envToken ?? account.token;
+  const resolverCache = hasArg("--no-resolver-cache")
+    ? undefined
+    : new ResolverCache(path.join(path.dirname(getConfigPath()), "resolver-cache"), baseUrl, token);
   return new PlaneApiClient({
-    baseUrl: envUrl ?? account.baseUrl,
-    token: envToken ?? account.token,
+    baseUrl,
+    token,
     apiStyle: account.apiStyle,
+    resolverCache,
   });
 }

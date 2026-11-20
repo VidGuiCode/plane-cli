@@ -1,5 +1,5 @@
 import type { PlaneReadClient } from "./api-client.js";
-import { unwrap } from "./api-client.js";
+import { findInResolverList } from "./api-client.js";
 import { ValidationError } from "./errors.js";
 import { stripHtml } from "./html.js";
 import {
@@ -57,12 +57,12 @@ export async function resolveIssueUpdateState(
   projectId: string,
   state: string,
 ): Promise<string> {
-  const response = await client.get<unknown>(
+  const lower = state.toLowerCase();
+  const match = await findInResolverList(
+    client,
     `workspaces/${workspace}/projects/${projectId}/states/`,
-  );
-  const states = unwrap<PlaneState>(response);
-  const match = states.find(
-    (candidate) => candidate.id === state || candidate.name.toLowerCase() === state.toLowerCase(),
+    (states: PlaneState[]) =>
+      states.find((candidate) => candidate.id === state || candidate.name.toLowerCase() === lower),
   );
   return match?.id ?? state;
 }

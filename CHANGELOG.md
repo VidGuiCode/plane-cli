@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+### Performance
+
+- **Reuse lookup results across commands** — saved accounts cache project, state, member, and label lookups for 60 seconds. A name miss refreshes the list. A 404 or a successful write to lookup metadata clears affected entries. Use `--no-resolver-cache` to force a fresh lookup for a command.
+
 ## 0.5.0
 
 ### Features

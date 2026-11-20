@@ -1,15 +1,13 @@
-import { unwrap, fetchAll } from "./api-client.js";
+import { unwrap, fetchAll, findInResolverList } from "./api-client.js";
 import { ValidationError } from "./errors.js";
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // ── Project ──────────────────────────────────────────────────────────────────
 export async function resolveProject(client, ws, ref) {
-    const res = await client.get(`workspaces/${ws}/projects/`);
-    const projects = unwrap(res);
     const lower = ref.toLowerCase();
     // A UUID copied straight from a browser URL (/projects/<uuid>/…) should resolve
     // against the project id; fall back to identifier/name for human-typed refs.
-    const match = (UUID_RE.test(ref) && projects.find((p) => p.id.toLowerCase() === lower)) ||
-        projects.find((p) => p.identifier.toLowerCase() === lower || p.name.toLowerCase() === lower);
+    const match = await findInResolverList(client, `workspaces/${ws}/projects/`, (projects) => (UUID_RE.test(ref) ? projects.find((p) => p.id.toLowerCase() === lower) : undefined) ??
+        projects.find((p) => p.identifier.toLowerCase() === lower || p.name.toLowerCase() === lower));
     if (!match)
         throw new Error(`Project "${ref}" not found in workspace "${ws}". Run: plane project list`);
     return { id: match.id, identifier: match.identifier, name: match.name };
@@ -161,11 +159,9 @@ export function getMemberId(m) {
     return m.id;
 }
 export async function resolveMember(client, ws, nameOrEmail) {
-    const res = await client.get(`workspaces/${ws}/members/`);
-    const members = unwrap(res);
     const lower = nameOrEmail.toLowerCase();
-    const match = members.find((m) => getMemberDisplayName(m).toLowerCase() === lower ||
-        (getMemberEmail(m)?.toLowerCase() ?? "") === lower);
+    const match = await findInResolverList(client, `workspaces/${ws}/members/`, (members) => members.find((m) => getMemberDisplayName(m).toLowerCase() === lower ||
+        (getMemberEmail(m)?.toLowerCase() ?? "") === lower));
     if (!match)
         throw new Error(`Member "${nameOrEmail}" not found in workspace "${ws}". Check with: plane members list`);
     return getMemberId(match);
@@ -254,10 +250,8 @@ export async function resolveLabel(client, ws, projectId, nameOrColor) {
     if (UUID_RE.test(nameOrColor)) {
         return nameOrColor;
     }
-    const res = await client.get(`workspaces/${ws}/projects/${projectId}/labels/`);
-    const labels = unwrap(res);
     const lower = nameOrColor.toLowerCase();
-    const match = labels.find((l) => l.name.toLowerCase() === lower || l.color.toLowerCase() === lower);
+    const match = await findInResolverList(client, `workspaces/${ws}/projects/${projectId}/labels/`, (labels) => labels.find((l) => l.name.toLowerCase() === lower || l.color.toLowerCase() === lower));
     if (!match)
         throw new Error(`Label "${nameOrColor}" not found in this project. Check with: plane label list`);
     return match.id;

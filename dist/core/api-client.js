@@ -35,6 +35,13 @@ export class PlaneApiClient {
     get token() {
         return this.options.token;
     }
+    get resolverCache() {
+        return this.options.resolverCache;
+    }
+    async resolveLookup(path, select) {
+        const load = async () => unwrap(await this.get(path));
+        return this.resolverCache ? this.resolverCache.find(path, load, select) : select(await load());
+    }
     issuesSegment() {
         return this.options.apiStyle;
     }
@@ -84,6 +91,7 @@ export class PlaneApiClient {
                 const res = await fetch(url, fetchOptions);
                 // Success or non-retryable error
                 if (res.ok || !this.isRetryableError(res.status)) {
+                    this.resolverCache?.observeResponse(path, options.method ?? "GET", res.status);
                     return res;
                 }
                 // Handle rate limit (429) specially
@@ -220,6 +228,11 @@ export class PlaneApiClient {
         }
         return res.json();
     }
+}
+export async function findInResolverList(client, path, select) {
+    return client.resolveLookup
+        ? client.resolveLookup(path, select)
+        : select(unwrap(await client.get(path)));
 }
 export async function fetchAll(client, path) {
     const sep = path.includes("?") ? "&" : "?";

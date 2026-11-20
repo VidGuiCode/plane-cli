@@ -200,7 +200,7 @@ Addresses the reported rewrite workflow limitations. Plane documents `PUT` for p
 
 ---
 
-## v0.5.0 *(release prep)* — batch issue updates
+## v0.5.0 *(shipped)* — batch issue updates
 
 The 2026-07-10 gap report described a batch of roughly 60 updates exceeding a two-minute shell timeout when each issue update launched a separate process. This release handles distinct updates in one process.
 

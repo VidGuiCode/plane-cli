@@ -148,3 +148,25 @@ describe("discover pages capability", () => {
     expect(payload.capabilities.pages.operations).toEqual([]);
   });
 });
+
+describe("discover issue-inputs automation surface", () => {
+  it("advertises batch update, bulk create, and label/description options", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    mockFetch((url) => baseRoutes(url) ?? { status: 404, body: { error: "Page not found." } });
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createDiscoverCommand().parseAsync(["issue-inputs"], { from: "user" });
+
+    const payload = JSON.parse(log.mock.calls[0][0] as string) as {
+      automation: Record<string, { command?: string; options?: string[] }>;
+    };
+    expect(payload.automation.batchUpdate?.command).toBe("plane issue update --from-json <file|->");
+    expect(payload.automation.bulkCreate?.command).toBe(
+      "plane issue bulk-create --file <json|yaml|->",
+    );
+    expect(payload.automation.bulkCreate?.options).toContain("--validate-only");
+    expect(payload.automation.missingLabelOptions?.options).toContain("--create-labels");
+    expect(payload.automation.descriptionInput?.options).toContain("--description-file <path|->");
+  });
+});

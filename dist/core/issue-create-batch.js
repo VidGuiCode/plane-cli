@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { parse } from "yaml";
 import { cacheBatchReads } from "./api-client.js";
-import { getErrorMessage, ValidationError } from "./errors.js";
+import { describeBatchError, getErrorMessage, ValidationError } from "./errors.js";
 import { executeIssueCreate, planIssueCreate, previewIssueCreate, } from "./issue-create.js";
 const strings = [
     "title",
@@ -19,6 +19,7 @@ const strings = [
 ];
 const arrays = ["assignee", "label", "labelId"];
 const fields = new Set([...strings, ...arrays]);
+const command = "plane issue bulk-create";
 export function readIssueCreateBatch(source) {
     let input;
     try {
@@ -93,7 +94,7 @@ export async function createIssueBatch(client, scope, entries, source, options, 
             rows.push({ ...identity, plan });
         }
         catch (error) {
-            rows.push({ ...identity, error: getErrorMessage(error) });
+            rows.push({ ...identity, ...describeBatchError(error, command) });
         }
     }
     const hasPreflightErrors = rows.some((row) => "error" in row);
@@ -103,7 +104,7 @@ export async function createIssueBatch(client, scope, entries, source, options, 
     for (const { row, title, ...outcome } of rows) {
         const identity = { row, title };
         if ("error" in outcome) {
-            results.push({ ...identity, status: "failed", error: outcome.error });
+            results.push({ ...identity, status: "failed", ...outcome });
         }
         else if (hasPreflightErrors && !dryRun && !options.validateOnly) {
             results.push({ ...identity, status: "blocked" });
@@ -128,7 +129,7 @@ export async function createIssueBatch(client, scope, entries, source, options, 
                 });
             }
             catch (error) {
-                results.push({ ...identity, status: "failed", error: getErrorMessage(error) });
+                results.push({ ...identity, status: "failed", ...describeBatchError(error, command) });
             }
         }
     }

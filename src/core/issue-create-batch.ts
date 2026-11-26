@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { parse } from "yaml";
 import { cacheBatchReads, type PlaneApiClient } from "./api-client.js";
-import { getErrorMessage, ValidationError } from "./errors.js";
+import { describeBatchError, getErrorMessage, ValidationError } from "./errors.js";
 import {
   executeIssueCreate,
   planIssueCreate,
@@ -26,6 +26,7 @@ const strings = [
 ];
 const arrays = ["assignee", "label", "labelId"];
 const fields = new Set([...strings, ...arrays]);
+const command = "plane issue bulk-create";
 
 export function readIssueCreateBatch(source: string): unknown[] {
   let input: string;
@@ -90,10 +91,11 @@ function readRow(entry: unknown, baseDir: string): IssueCreateFields {
 
 type Scope = Parameters<typeof planIssueCreate>[1];
 type Plan = Awaited<ReturnType<typeof planIssueCreate>>;
+type RowError = ReturnType<typeof describeBatchError>;
 type RowIdentity = { row: number; title?: string };
 type RowResult = RowIdentity &
   (
-    | { status: "failed"; error: string }
+    | ({ status: "failed" } & RowError)
     | { status: "blocked" }
     | { status: "validated" | "planned"; requests: ReturnType<typeof previewIssueCreate> }
     | {
@@ -115,7 +117,7 @@ export async function createIssueBatch(
   const baseDir = source === "-" ? process.cwd() : dirname(resolve(source));
   const lookup = cacheBatchReads(client);
   const style = client.issuesSegment();
-  const rows: (RowIdentity & ({ plan: Plan } | { error: string }))[] = [];
+  const rows: (RowIdentity & ({ plan: Plan } | RowError))[] = [];
   for (const [index, entry] of entries.entries()) {
     const identity: RowIdentity = { row: index + 1 };
     try {
@@ -124,7 +126,7 @@ export async function createIssueBatch(
       const plan = await planIssueCreate(lookup, scope, style, fields, options, true);
       rows.push({ ...identity, plan });
     } catch (error) {
-      rows.push({ ...identity, error: getErrorMessage(error) });
+      rows.push({ ...identity, ...describeBatchError(error, command) });
     }
   }
 
@@ -135,7 +137,7 @@ export async function createIssueBatch(
   for (const { row, title, ...outcome } of rows) {
     const identity = { row, title };
     if ("error" in outcome) {
-      results.push({ ...identity, status: "failed", error: outcome.error });
+      results.push({ ...identity, status: "failed", ...outcome });
     } else if (hasPreflightErrors && !dryRun && !options.validateOnly) {
       results.push({ ...identity, status: "blocked" });
     } else if (dryRun || options.validateOnly) {
@@ -160,7 +162,7 @@ export async function createIssueBatch(
           ...(ignoredLabels.length ? { ignoredLabels } : {}),
         });
       } catch (error) {
-        results.push({ ...identity, status: "failed", error: getErrorMessage(error) });
+        results.push({ ...identity, status: "failed", ...describeBatchError(error, command) });
       }
     }
   }

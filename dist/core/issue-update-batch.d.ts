@@ -1,4 +1,5 @@
 import { type PlaneApiClient } from "./api-client.js";
+import { describeBatchError } from "./errors.js";
 import { type IssueUpdateFields } from "./issue-update.js";
 type BatchEntry = IssueUpdateFields & {
     issue: string;
@@ -17,8 +18,7 @@ type RowIdentity = {
 type RowFailure = Partial<RowIdentity> & {
     issue: string;
     status: "failed";
-    error: string;
-};
+} & ReturnType<typeof describeBatchError>;
 type BatchResult = RowFailure | (RowIdentity & {
     status: "updated";
 }) | (RowIdentity & {

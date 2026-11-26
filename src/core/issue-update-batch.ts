@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { cacheBatchReads, type PlaneApiClient } from "./api-client.js";
-import { getErrorMessage, ValidationError } from "./errors.js";
+import { describeBatchError, getErrorMessage, ValidationError } from "./errors.js";
 import {
   assertIssueUpdateRoundTrip,
   buildIssueUpdateBaseBody,
@@ -28,6 +28,7 @@ const arrayFields = ["assignee", "label", "labelId"] as const;
 const updateFields = [...stringFields, ...arrayFields];
 const allowedFields = new Set<string>(["issue", ...updateFields]);
 const maxConcurrentRows = 4;
+const command = "plane issue update";
 
 type BatchEntry = IssueUpdateFields & { issue: string };
 type IssueTarget = Awaited<ReturnType<typeof resolveIssueRef>>;
@@ -38,7 +39,9 @@ type BatchScope = {
   activeProjectIdentifier?: string;
 };
 type RowIdentity = { issue: string; issueId: string; projectId: string };
-type RowFailure = Partial<RowIdentity> & { issue: string; status: "failed"; error: string };
+type RowFailure = Partial<RowIdentity> & { issue: string; status: "failed" } & ReturnType<
+    typeof describeBatchError
+  >;
 type BatchResult =
   | RowFailure
   | (RowIdentity & { status: "updated" })
@@ -152,7 +155,7 @@ export async function updateIssueBatch(
       );
       return { entry, target };
     } catch (error) {
-      return { entry, error: getErrorMessage(error) };
+      return { entry, failure: describeBatchError(error, command) };
     }
   });
   const seenTargets = new Set<string>();
@@ -166,11 +169,18 @@ export async function updateIssueBatch(
 
   const results = await mapBatchRows(resolved, async (row): Promise<BatchResult> => {
     const { entry, target } = row;
-    if (!target) return { issue: entry.issue, status: "failed", error: row.error };
+    if (!target) return { issue: entry.issue, status: "failed", ...row.failure };
     const { issueId, projectId } = target;
     const identity = { issue: entry.issue, issueId, projectId };
     if (duplicateTargets.has(targetKey(target))) {
-      return { ...identity, status: "failed", error: "Multiple batch entries target this issue." };
+      return {
+        ...identity,
+        status: "failed",
+        ...describeBatchError(
+          new ValidationError("Multiple batch entries target this issue."),
+          command,
+        ),
+      };
     }
 
     try {
@@ -209,7 +219,7 @@ export async function updateIssueBatch(
       assertIssueUpdateRoundTrip(updated, body);
       return { ...identity, status: "updated" };
     } catch (error) {
-      return { ...identity, status: "failed", error: getErrorMessage(error) };
+      return { ...identity, status: "failed", ...describeBatchError(error, command) };
     }
   });
 

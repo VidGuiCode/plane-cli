@@ -26,6 +26,10 @@ plane issue create --project PROJ --title "Fix login bug" --no-interactive --jso
 
 Exit codes are `0` for success, `1` for general errors or failed batch rows, `2` for authentication or access errors, `3` for validation or required interactive input, and `4` for rate limits.
 
+Structured command errors on stderr include `status`, `code`, `message`, `command`, `retryable`, and `suggestedFix`. `command` gives the command name without arguments, and `suggestedFix` is null when the CLI has no specific guidance. API errors also include `details` with the HTTP status and other available request information.
+
+In JSON batch results, failed rows keep their `error` string and include `errorDetails` with `code`, `command`, `retryable`, and `suggestedFix`. A retryable row indicates a transient failure. Check the result of each row before resubmitting work, especially after a partial result or an uncertain write.
+
 ## Authentication for CI
 
 Set `PLANE_BASE_URL` and `PLANE_API_TOKEN` together to run without a saved account. Inject the token through your CI secret store. Set the workspace with `PLANE_WORKSPACE` or `--workspace`, then pass `--project` for project-scoped commands.

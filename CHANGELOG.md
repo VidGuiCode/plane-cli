@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Structured JSON errors and failed batch rows include the command, retryability, and suggested remediation when available (`command`, `retryable`, `suggestedFix`).
+- `discover issue-inputs` advertises the batch surfaces in its `automation` block: `issue update --from-json`, `issue bulk-create --file`, missing-label options, and the description input flags.
+
 ## 0.6.0
 
 - Create issues in bulk from JSON or YAML, with read-only validation and dry-run previews.

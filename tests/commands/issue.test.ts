@@ -761,7 +761,15 @@ describe("issue creation preflight and import", () => {
         failed: 3,
         results: [
           { status: "blocked" },
-          { status: "failed", error: expect.stringContaining("valid date") },
+          {
+            status: "failed",
+            error: expect.stringContaining("valid date"),
+            errorDetails: {
+              code: "ValidationError",
+              command: "plane issue bulk-create",
+              retryable: false,
+            },
+          },
           { status: "failed", error: expect.stringContaining('State "Missing"') },
           { status: "failed", error: expect.stringContaining('Member "Nobody"') },
         ],

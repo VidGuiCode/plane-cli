@@ -1,5 +1,6 @@
 import { PlaneApiError, PlaneApiRateLimitError } from "./api-client.js";
-import { printError, printErrorJson } from "./output.js";
+import { printError } from "./output.js";
+import { getActiveCommand } from "./runtime.js";
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -53,6 +54,77 @@ export function getErrorMessage(error: unknown): string {
   }
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+export interface ErrorDetails {
+  code: string;
+  command: string | null;
+  retryable: boolean;
+  suggestedFix: string | null;
+}
+
+function describeError(error: unknown, command: string | null): ErrorDetails {
+  if (error instanceof PlaneApiError) {
+    const rateLimited = error.status === 429;
+    const read = !error.method || ["GET", "HEAD"].includes(error.method);
+    const transient = [408, 500, 502, 503, 504].includes(error.status);
+    const retryable = rateLimited || (read && transient);
+    let suggestedFix = getStatusHint(error.status, error.path);
+    if (rateLimited) {
+      suggestedFix = "Wait for the rate limit to reset before retrying.";
+    } else if (transient) {
+      suggestedFix = read
+        ? "Wait briefly and retry the request."
+        : "Check whether the write took effect in Plane before retrying.";
+    } else if (error.status === 400 || error.status === 422) {
+      suggestedFix = "Check the input against the validation response from Plane.";
+    }
+    return {
+      code: error instanceof PlaneApiRateLimitError ? "RATE_LIMITED" : "API_ERROR",
+      command,
+      retryable,
+      suggestedFix,
+    };
+  }
+  let suggestedFix: string | null = null;
+  if (error instanceof ValidationError) suggestedFix = "Correct the input described in the error.";
+  if (error instanceof NonInteractiveError)
+    suggestedFix = "Pass the required value as an option or use an interactive terminal.";
+  return {
+    code: error instanceof Error ? error.name : "UNKNOWN_ERROR",
+    command,
+    retryable: false,
+    suggestedFix,
+  };
+}
+
+export function printErrorJson(error: unknown, command = getActiveCommand()): void {
+  const details =
+    error instanceof PlaneApiError
+      ? {
+          httpStatus: error.status,
+          ...(error instanceof PlaneApiRateLimitError ? { retryAfter: error.retryAfter } : {}),
+          method: error.method,
+          path: error.path,
+          ...(typeof error.details === "object" && error.details !== null ? error.details : {}),
+        }
+      : undefined;
+  console.error(
+    JSON.stringify(
+      {
+        status: "error",
+        ...describeError(error, command),
+        message: error instanceof Error ? error.message : String(error),
+        details,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+export function describeBatchError(error: unknown, command: string) {
+  return { error: getErrorMessage(error), errorDetails: describeError(error, command) };
 }
 
 export function exitWithError(error: unknown, json = false): never {

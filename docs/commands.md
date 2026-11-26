@@ -9,7 +9,7 @@ Run `plane --help` for the command groups or `plane issue update --help` for a c
 | `account` | `list`, `use`, `show`, `remove` |
 | `workspace` | `list`, `use` |
 | `project` | `list`, `use`, `show`, `create`, `update` |
-| `issue` | `list`, `mine`, `get` (`view`), `create`, `update`, `move`, `delete`, `close`, `reopen`, `open` |
+| `issue` | `list`, `mine`, `get` (`view`), `create`, `bulk-create`, `update`, `move`, `delete`, `close`, `reopen`, `open` |
 | `cycle` | `list`, `current`, `issues`, `create`, `update`, `ensure`, `add`, `remove`, `delete` |
 | `module` | `list`, `issues`, `create`, `update`, `ensure`, `add`, `remove`, `delete` |
 | `label` | `list`, `create`, `ensure`, `update`, `delete`, `add`, `remove` |

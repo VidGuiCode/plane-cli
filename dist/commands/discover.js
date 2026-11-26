@@ -213,6 +213,30 @@ export function createDiscoverCommand() {
                             cycle: "cycle id or name",
                         },
                     },
+                    batchUpdate: {
+                        command: "plane issue update --from-json <file|->",
+                        input: "JSON array with one row per issue: { issue, ...updateFields }",
+                        behavior: "applies distinct updates to multiple issues in one process; --dry-run previews",
+                    },
+                    bulkCreate: {
+                        command: "plane issue bulk-create --file <json|yaml|->",
+                        input: "JSON or YAML array of issue specs",
+                        options: [
+                            "--validate-only",
+                            "--dry-run",
+                            "--create-labels",
+                            "--ignore-missing-labels",
+                        ],
+                    },
+                    missingLabelOptions: {
+                        command: "plane issue create --label <name>",
+                        options: ["--create-labels", "--ignore-missing-labels", "--validate-only"],
+                        behavior: "missing named labels fail by default; these flags create, skip, or preflight them",
+                    },
+                    descriptionInput: {
+                        options: ["--description", "--description-html", "--description-file <path|->"],
+                        behavior: "choose one; --description-file reads UTF-8 text from a file or stdin",
+                    },
                 },
                 inputs: {
                     states: inputs.states.map((state) => ({

@@ -1,15 +1,16 @@
 import { type PlaneApiClient } from "./api-client.js";
+import { describeBatchError } from "./errors.js";
 import { executeIssueCreate, planIssueCreate, previewIssueCreate, type CreateOptions } from "./issue-create.js";
 export declare function readIssueCreateBatch(source: string): unknown[];
 type Scope = Parameters<typeof planIssueCreate>[1];
+type RowError = ReturnType<typeof describeBatchError>;
 type RowIdentity = {
     row: number;
     title?: string;
 };
-type RowResult = RowIdentity & ({
+type RowResult = RowIdentity & (({
     status: "failed";
-    error: string;
-} | {
+} & RowError) | {
     status: "blocked";
 } | {
     status: "validated" | "planned";

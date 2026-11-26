@@ -20,6 +20,7 @@ import { createDiscoverCommand } from "./commands/discover.js";
 import { createProfileCommand } from "./commands/profile.js";
 import { createUpgradeCommand, fetchLatestVersion, isNewer } from "./commands/upgrade.js";
 import { configureHelp } from "./core/help.js";
+import { setActiveCommand } from "./core/runtime.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -79,5 +80,13 @@ program.addCommand(createProfileCommand());
 
 // Apply after all commands are registered so the recursion covers every subcommand
 configureHelp(program);
+
+program.hook("preAction", (_root, command) => {
+  const names: string[] = [];
+  for (let current: Command | null = command; current; current = current.parent) {
+    names.unshift(current.name());
+  }
+  setActiveCommand(names.join(" "));
+});
 
 program.parseAsync(process.argv);

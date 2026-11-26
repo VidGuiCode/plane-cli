@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { cacheBatchReads } from "./api-client.js";
-import { getErrorMessage, ValidationError } from "./errors.js";
+import { describeBatchError, getErrorMessage, ValidationError } from "./errors.js";
 import { assertIssueUpdateRoundTrip, buildIssueUpdateBaseBody, resolveIssueUpdateLabels, resolveIssueUpdateParent, resolveIssueUpdateState, validateIssueUpdateLabelIds, } from "./issue-update.js";
 import { resolveIssueRef, resolveProject } from "./resolvers.js";
 const stringFields = [
@@ -18,6 +18,7 @@ const arrayFields = ["assignee", "label", "labelId"];
 const updateFields = [...stringFields, ...arrayFields];
 const allowedFields = new Set(["issue", ...updateFields]);
 const maxConcurrentRows = 4;
+const command = "plane issue update";
 export function hasIssueUpdateFlags(fields) {
     return (fields.descriptionFile !== undefined ||
         stringFields.some((field) => fields[field] !== undefined) ||
@@ -100,7 +101,7 @@ export async function updateIssueBatch(client, scope, entries, dryRun) {
             return { entry, target };
         }
         catch (error) {
-            return { entry, error: getErrorMessage(error) };
+            return { entry, failure: describeBatchError(error, command) };
         }
     });
     const seenTargets = new Set();
@@ -116,11 +117,15 @@ export async function updateIssueBatch(client, scope, entries, dryRun) {
     const results = await mapBatchRows(resolved, async (row) => {
         const { entry, target } = row;
         if (!target)
-            return { issue: entry.issue, status: "failed", error: row.error };
+            return { issue: entry.issue, status: "failed", ...row.failure };
         const { issueId, projectId } = target;
         const identity = { issue: entry.issue, issueId, projectId };
         if (duplicateTargets.has(targetKey(target))) {
-            return { ...identity, status: "failed", error: "Multiple batch entries target this issue." };
+            return {
+                ...identity,
+                status: "failed",
+                ...describeBatchError(new ValidationError("Multiple batch entries target this issue."), command),
+            };
         }
         try {
             if (entry.description !== undefined && entry.descriptionHtml !== undefined) {
@@ -148,7 +153,7 @@ export async function updateIssueBatch(client, scope, entries, dryRun) {
             return { ...identity, status: "updated" };
         }
         catch (error) {
-            return { ...identity, status: "failed", error: getErrorMessage(error) };
+            return { ...identity, status: "failed", ...describeBatchError(error, command) };
         }
     });
     return {

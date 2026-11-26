@@ -1,3 +1,10 @@
+let activeCommand = null;
+export function setActiveCommand(command) {
+    activeCommand = command;
+}
+export function getActiveCommand() {
+    return activeCommand;
+}
 export function hasArg(flag) {
     return process.argv.includes(flag);
 }

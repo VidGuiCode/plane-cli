@@ -28,6 +28,8 @@ Commands that support multiple issue refs accept comma-separated values. For exa
 
 Use `--columns` to choose table columns for `issue list` or `issue mine`. With `--json`, use `--fields` to select fields from `issue list`, `issue mine`, or `issue get`. Use `--search <query>` on `issue list` or `issue mine` to filter by keyword in the title, identifier (`PROJ-42`), or stripped description, case-insensitively. It combines with `--state`, `--priority`, `--assignee`, and `--updated-since`.
 
+Pass `--project ALL` to `issue list` or `issue mine` to list issues across every project in the workspace in one call. All filters apply per project, and each row keeps its own `PROJ-N` identifier and `projectId`.
+
 | JSON field | API alias |
 | --- | --- |
 | `projectId` | `project_id` |

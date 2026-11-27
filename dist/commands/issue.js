@@ -13,6 +13,7 @@ import { createIssueBatch, readIssueCreateBatch } from "../core/issue-create-bat
 import { assertIssueUpdateRoundTrip, buildIssueUpdateBaseBody, resolveIssueUpdateLabels, resolveIssueUpdateParent, resolveIssueUpdateState, validateIssueUpdateLabelIds, } from "../core/issue-update.js";
 import { hasIssueUpdateFlags, readIssueUpdateBatch, updateIssueBatch, } from "../core/issue-update-batch.js";
 import { resolveProject, resolveIssueRef, buildStateMap, resolveState, resolveMember, resolveCurrentUserId, normalizeIssue, projectIssueFields, findUnknownFields, } from "../core/resolvers.js";
+import { fetchProjects } from "../core/discovery.js";
 /**
  * Warn (on stderr, keeping stdout pure JSON) when `--fields` contains names that
  * aren't keys of the normalized issue — otherwise they're silently dropped and
@@ -35,7 +36,7 @@ export function createIssueCommand() {
         .command("list")
         .description("List issues in the active (or specified) project")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier, name, or UUID; ALL lists issues across all workspace projects")
         .option("--state <names>", "Filter by state name(s), comma-separated (e.g. Todo,InProgress)")
         .option("--priority <values>", "Filter by priority, comma-separated: urgent | high | medium | low | none")
         .option("--assignee <names>", "Filter by assignee(s), comma-separated display names/emails or 'me'")
@@ -49,18 +50,6 @@ export function createIssueCommand() {
             const config = loadConfig();
             const client = createClient(config);
             const ws = opts.workspace ?? requireActiveWorkspace(config);
-            let projectId;
-            let identifier;
-            if (opts.project) {
-                const proj = await resolveProject(client, ws, opts.project);
-                projectId = proj.id;
-                identifier = proj.identifier;
-            }
-            else {
-                const active = requireActiveProject(config);
-                projectId = active.id;
-                identifier = active.identifier;
-            }
             // Resolve assignee(s)
             let assigneeIds;
             if (opts.assignee) {
@@ -72,7 +61,7 @@ export function createIssueCommand() {
                     ? resolveCurrentUserId(client)
                     : resolveMember(client, ws, n)));
             }
-            await listIssuesCore(client, ws, projectId, identifier, {
+            const filterOpts = {
                 states: opts.state
                     ?.split(",")
                     .map((s) => s.trim())
@@ -87,30 +76,11 @@ export function createIssueCommand() {
                 json: opts.json,
                 fields: opts.fields,
                 columns: opts.columns,
-            });
-        }
-        catch (err) {
-            exitWithError(err, Boolean(opts.json));
-        }
-    });
-    // ── mine ─────────────────────────────────────────────────────────────────
-    command
-        .command("mine")
-        .description("List issues assigned to you (shortcut for: issue list --assignee me)")
-        .option("--workspace <slug>", "Workspace slug (overrides active context)")
-        .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
-        .option("--state <names>", "Filter by state name(s), comma-separated")
-        .option("--priority <values>", "Filter by priority, comma-separated: urgent | high | medium | low | none")
-        .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
-        .option("--search <query>", "Filter by keyword in title, identifier, or description (case-insensitive)")
-        .option("--json", "Output raw JSON")
-        .option("--fields <names>", "Comma-separated fields for JSON output")
-        .option("--columns <list>", "Comma-separated columns for the table (id,title,state,priority,due,start,assignee,labels,uuid,created,updated)")
-        .action(async (opts) => {
-        try {
-            const config = loadConfig();
-            const client = createClient(config);
-            const ws = opts.workspace ?? requireActiveWorkspace(config);
+            };
+            if (opts.project && opts.project.trim().toUpperCase() === "ALL") {
+                await listIssuesAllProjects(client, ws, filterOpts);
+                return;
+            }
             let projectId;
             let identifier;
             if (opts.project) {
@@ -123,8 +93,32 @@ export function createIssueCommand() {
                 projectId = active.id;
                 identifier = active.identifier;
             }
+            await listIssuesCore(client, ws, projectId, identifier, filterOpts);
+        }
+        catch (err) {
+            exitWithError(err, Boolean(opts.json));
+        }
+    });
+    // ── mine ─────────────────────────────────────────────────────────────────
+    command
+        .command("mine")
+        .description("List issues assigned to you (shortcut for: issue list --assignee me)")
+        .option("--workspace <slug>", "Workspace slug (overrides active context)")
+        .option("--project <identifier-or-name>", "Project identifier, name, or UUID; ALL lists your issues across all workspace projects")
+        .option("--state <names>", "Filter by state name(s), comma-separated")
+        .option("--priority <values>", "Filter by priority, comma-separated: urgent | high | medium | low | none")
+        .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
+        .option("--search <query>", "Filter by keyword in title, identifier, or description (case-insensitive)")
+        .option("--json", "Output raw JSON")
+        .option("--fields <names>", "Comma-separated fields for JSON output")
+        .option("--columns <list>", "Comma-separated columns for the table (id,title,state,priority,due,start,assignee,labels,uuid,created,updated)")
+        .action(async (opts) => {
+        try {
+            const config = loadConfig();
+            const client = createClient(config);
+            const ws = opts.workspace ?? requireActiveWorkspace(config);
             const myId = await resolveCurrentUserId(client);
-            await listIssuesCore(client, ws, projectId, identifier, {
+            const filterOpts = {
                 states: opts.state
                     ?.split(",")
                     .map((s) => s.trim())
@@ -139,7 +133,24 @@ export function createIssueCommand() {
                 json: opts.json,
                 fields: opts.fields,
                 columns: opts.columns,
-            });
+            };
+            if (opts.project && opts.project.trim().toUpperCase() === "ALL") {
+                await listIssuesAllProjects(client, ws, filterOpts);
+                return;
+            }
+            let projectId;
+            let identifier;
+            if (opts.project) {
+                const proj = await resolveProject(client, ws, opts.project);
+                projectId = proj.id;
+                identifier = proj.identifier;
+            }
+            else {
+                const active = requireActiveProject(config);
+                projectId = active.id;
+                identifier = active.identifier;
+            }
+            await listIssuesCore(client, ws, projectId, identifier, filterOpts);
         }
         catch (err) {
             exitWithError(err, Boolean(opts.json));
@@ -902,6 +913,71 @@ export function resolveIssueColumns(columnsCsv) {
     }
     return requested;
 }
+/** Apply the in-memory list filters. State names resolve against the given project's state list. */
+function applyIssueFilters(issues, filters, stateList, identifier) {
+    // Build state-name → ID set for filter matching
+    let stateFilterIds;
+    if (filters.states && filters.states.length > 0) {
+        const lowerNames = new Set(filters.states.map((s) => s.toLowerCase()));
+        stateFilterIds = new Set(stateList.filter((s) => lowerNames.has(s.name.toLowerCase())).map((s) => s.id));
+    }
+    let result = issues;
+    if (stateFilterIds) {
+        result = result.filter((issue) => {
+            const stateId = typeof issue.state === "string"
+                ? issue.state
+                : (issue.state?.id ?? "");
+            return stateFilterIds.has(stateId);
+        });
+    }
+    if (filters.priorities && filters.priorities.length > 0) {
+        const prioritySet = new Set(filters.priorities.map((p) => p.toLowerCase()));
+        result = result.filter((issue) => prioritySet.has((issue.priority ?? "none").toLowerCase()));
+    }
+    if (filters.assigneeIds && filters.assigneeIds.length > 0) {
+        const assigneeSet = new Set(filters.assigneeIds);
+        result = result.filter((issue) => (issue.assignees ?? []).some((a) => assigneeSet.has(a)));
+    }
+    if (filters.updatedSince) {
+        const since = new Date(filters.updatedSince);
+        if (isNaN(since.getTime())) {
+            throw new ValidationError(`Invalid date "${filters.updatedSince}". Use YYYY-MM-DD format.`);
+        }
+        result = result.filter((issue) => new Date(issue.updated_at) >= since);
+    }
+    if (filters.search) {
+        const query = filters.search.toLowerCase();
+        result = result.filter((issue) => {
+            const haystack = [
+                issue.name ?? "",
+                `${identifier}-${issue.sequence_id}`,
+                stripHtml(issue.description_html ?? ""),
+            ]
+                .join(" ")
+                .toLowerCase();
+            return haystack.includes(query);
+        });
+    }
+    return result;
+}
+function renderIssueList(entries, opts, columns) {
+    if (entries.length === 0) {
+        printInfo("No issues found.");
+        return;
+    }
+    if (opts.json) {
+        const normalized = entries.map(({ issue, identifier, projectId, stateMap }) => normalizeIssue(issue, stateMap, identifier, projectId));
+        if (opts.fields)
+            warnUnknownFields(normalized[0], opts.fields);
+        printJson(opts.fields ? normalized.map((n) => projectIssueFields(n, opts.fields)) : normalized);
+        return;
+    }
+    const rows = entries.map(({ issue, identifier, projectId, stateMap }) => {
+        const normalized = normalizeIssue(issue, stateMap, identifier, projectId);
+        return columns.map((col) => ISSUE_COLUMNS[col].get(normalized));
+    });
+    printTable(rows, columns.map((col) => ISSUE_COLUMNS[col].header));
+}
 async function listIssuesCore(client, ws, projectId, identifier, opts) {
     const style = client.issuesSegment();
     const basePath = `workspaces/${ws}/projects/${projectId}/${style}/`;
@@ -914,64 +990,33 @@ async function listIssuesCore(client, ws, projectId, identifier, opts) {
             .then((r) => unwrap(r)),
     ]);
     const stateMap = buildStateMap(stateList);
-    // Build state-name → ID set for filter matching
-    let stateFilterIds;
-    if (opts.states && opts.states.length > 0) {
-        const lowerNames = new Set(opts.states.map((s) => s.toLowerCase()));
-        stateFilterIds = new Set(stateList.filter((s) => lowerNames.has(s.name.toLowerCase())).map((s) => s.id));
-    }
-    let issues = allIssues;
-    if (stateFilterIds) {
-        issues = issues.filter((issue) => {
-            const stateId = typeof issue.state === "string"
-                ? issue.state
-                : (issue.state?.id ?? "");
-            return stateFilterIds.has(stateId);
-        });
-    }
-    if (opts.priorities && opts.priorities.length > 0) {
-        const prioritySet = new Set(opts.priorities.map((p) => p.toLowerCase()));
-        issues = issues.filter((issue) => prioritySet.has((issue.priority ?? "none").toLowerCase()));
-    }
-    if (opts.assigneeIds && opts.assigneeIds.length > 0) {
-        const assigneeSet = new Set(opts.assigneeIds);
-        issues = issues.filter((issue) => (issue.assignees ?? []).some((a) => assigneeSet.has(a)));
-    }
-    if (opts.updatedSince) {
-        const since = new Date(opts.updatedSince);
-        if (isNaN(since.getTime())) {
-            throw new ValidationError(`Invalid date "${opts.updatedSince}". Use YYYY-MM-DD format.`);
-        }
-        issues = issues.filter((issue) => new Date(issue.updated_at) >= since);
-    }
-    if (opts.search) {
-        const query = opts.search.toLowerCase();
-        issues = issues.filter((issue) => {
-            const haystack = [
-                issue.name ?? "",
-                `${identifier}-${issue.sequence_id}`,
-                stripHtml(issue.description_html ?? ""),
-            ]
-                .join(" ")
-                .toLowerCase();
-            return haystack.includes(query);
-        });
-    }
-    if (issues.length === 0) {
-        printInfo("No issues found.");
+    const issues = applyIssueFilters(allIssues, opts, stateList, identifier);
+    renderIssueList(issues.map((issue) => ({ issue, identifier, projectId, stateMap })), opts, columns);
+}
+/** `--project ALL`: list issues across every project in the workspace in one call. */
+async function listIssuesAllProjects(client, ws, opts) {
+    const columns = resolveIssueColumns(opts.columns);
+    const projects = await fetchProjects(client, ws);
+    if (projects.length === 0) {
+        printInfo("No projects found in this workspace.");
         return;
     }
-    if (opts.json) {
-        const normalized = issues.map((issue) => normalizeIssue(issue, stateMap, identifier, projectId));
-        if (opts.fields)
-            warnUnknownFields(normalized[0], opts.fields);
-        printJson(opts.fields ? normalized.map((n) => projectIssueFields(n, opts.fields)) : normalized);
-        return;
-    }
-    const rows = issues.map((issue) => {
-        const normalized = normalizeIssue(issue, stateMap, identifier, projectId);
-        return columns.map((col) => ISSUE_COLUMNS[col].get(normalized));
-    });
-    printTable(rows, columns.map((col) => ISSUE_COLUMNS[col].header));
+    const style = client.issuesSegment();
+    const perProject = await Promise.all(projects.map(async (project) => {
+        const [issues, stateList] = await Promise.all([
+            fetchAll(client, `workspaces/${ws}/projects/${project.id}/${style}/`),
+            client
+                .get(`workspaces/${ws}/projects/${project.id}/states/`)
+                .then((r) => unwrap(r)),
+        ]);
+        return { project, issues, stateList, stateMap: buildStateMap(stateList) };
+    }));
+    const entries = perProject.flatMap(({ project, issues, stateList, stateMap }) => applyIssueFilters(issues, opts, stateList, project.identifier).map((issue) => ({
+        issue,
+        identifier: project.identifier,
+        projectId: project.id,
+        stateMap,
+    })));
+    renderIssueList(entries, opts, columns);
 }
 //# sourceMappingURL=issue.js.map

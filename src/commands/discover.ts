@@ -178,7 +178,11 @@ export function createDiscoverCommand(): Command {
             },
           },
           selectors: {
-            project: { accepted: ["identifier", "name"] },
+            project: {
+              accepted: ["identifier", "name", "uuid"],
+              allProjects:
+                "issue list / issue mine accept --project ALL to span all workspace projects",
+            },
             issue: {
               accepted: ["sequence", "project-sequence", "uuid", "comma-separated-list"],
               examples: [

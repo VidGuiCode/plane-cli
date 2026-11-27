@@ -628,6 +628,110 @@ describe("issue list --search", () => {
   });
 });
 
+describe("issue list --project ALL", () => {
+  function mockAllProjectsFetch(): void {
+    const projects = [
+      { id: "pa", identifier: "AAA", name: "Alpha" },
+      { id: "pb", identifier: "BBB", name: "Beta" },
+    ];
+    const issuesByProject: Record<string, Array<Record<string, unknown>>> = {
+      pa: [{ id: "i1", sequence_id: 1, name: "Alpha login fix", state: "s1" }],
+      pb: [{ id: "i2", sequence_id: 2, name: "Beta deploy", state: "s1" }],
+    };
+    globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const path = new URL(url).pathname;
+      let body: unknown = {};
+      if (path.endsWith("/projects/")) {
+        body = { results: projects, next_page_results: false };
+      } else if (path.includes("/states/")) {
+        body = { results: [{ id: "s1", name: "Todo", group: "unstarted" }] };
+      } else if (path.includes("/issues/")) {
+        const projectId = path.split("/projects/")[1].split("/")[0];
+        body = { results: issuesByProject[projectId] ?? [], next_page_results: false };
+      } else if (path.includes("/users/me/")) {
+        body = { id: "me-1", email: "me@x", display_name: "Me" };
+      }
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+  }
+
+  it("lists issues across all workspace projects with per-project identifiers", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    mockAllProjectsFetch();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["list", "--project", "ALL", "--json"], { from: "user" });
+
+    const rows = JSON.parse(log.mock.calls[0][0] as string) as Array<{
+      identifier: string;
+      projectId: string;
+      title: string;
+    }>;
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.identifier).sort()).toEqual(["AAA-1", "BBB-2"]);
+    expect(rows.find((r) => r.identifier === "AAA-1")?.projectId).toBe("pa");
+    expect(rows.find((r) => r.identifier === "BBB-2")?.title).toBe("Beta deploy");
+  });
+
+  it("combines ALL with --search across projects", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    mockAllProjectsFetch();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["list", "--project", "ALL", "--search", "deploy", "--json"], {
+      from: "user",
+    });
+
+    const rows = JSON.parse(log.mock.calls[0][0] as string) as Array<{ identifier: string }>;
+    expect(rows.map((r) => r.identifier)).toEqual(["BBB-2"]);
+  });
+
+  it("issue mine --project ALL filters to the current user across projects", async () => {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const path = new URL(url).pathname;
+      let body: unknown = {};
+      if (path.endsWith("/projects/")) {
+        body = {
+          results: [
+            { id: "pa", identifier: "AAA", name: "Alpha" },
+            { id: "pb", identifier: "BBB", name: "Beta" },
+          ],
+          next_page_results: false,
+        };
+      } else if (path.includes("/states/")) {
+        body = { results: [{ id: "s1", name: "Todo", group: "unstarted" }] };
+      } else if (path.includes("/issues/")) {
+        const projectId = path.split("/projects/")[1].split("/")[0];
+        body = {
+          results: [
+            { id: `i-${projectId}`, sequence_id: 1, name: `Task in ${projectId}`, state: "s1", assignees: ["me-1"] },
+            { id: `o-${projectId}`, sequence_id: 2, name: `Other in ${projectId}`, state: "s1", assignees: ["someone-else"] },
+          ],
+          next_page_results: false,
+        };
+      } else if (path.includes("/users/me/")) {
+        body = { id: "me-1", email: "me@x", display_name: "Me" };
+      }
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["mine", "--project", "ALL", "--json"], { from: "user" });
+
+    const rows = JSON.parse(log.mock.calls[0][0] as string) as Array<{ identifier: string }>;
+    expect(rows.map((r) => r.identifier).sort()).toEqual(["AAA-1", "BBB-1"]);
+  });
+});
+
 describe("issue create --module / --cycle", () => {
   it("dry-run previews the create POST plus module and cycle membership POSTs", async () => {
     writeConfig();

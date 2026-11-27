@@ -26,7 +26,7 @@ Use `42` for an issue in the active project, `PROJ-42` to identify a project and
 
 Commands that support multiple issue refs accept comma-separated values. For example, `plane issue update PROJ-42,PROJ-43 --priority high` applies the same update to both issues. To apply distinct changes, use [JSON batch updates](automation.md#update-issues-from-json).
 
-Use `--columns` to choose table columns for `issue list` or `issue mine`. With `--json`, use `--fields` to select fields from `issue list`, `issue mine`, or `issue get`.
+Use `--columns` to choose table columns for `issue list` or `issue mine`. With `--json`, use `--fields` to select fields from `issue list`, `issue mine`, or `issue get`. Use `--search <query>` on `issue list` or `issue mine` to filter by keyword in the title, identifier (`PROJ-42`), or stripped description, case-insensitively. It combines with `--state`, `--priority`, `--assignee`, and `--updated-since`.
 
 | JSON field | API alias |
 | --- | --- |

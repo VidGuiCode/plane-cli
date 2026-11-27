@@ -583,6 +583,51 @@ describe("issue list --columns", () => {
   });
 });
 
+describe("issue list --search", () => {
+  const issues = [
+    {
+      id: "issue-1",
+      sequence_id: 7,
+      name: "Fix login redirect",
+      state: "state-1",
+      description_html: "<p>Handle <b>OAuth</b> callback</p>",
+    },
+    { id: "issue-2", sequence_id: 8, name: "Update roadmap", state: "state-1" },
+    { id: "issue-3", sequence_id: 9, name: "Unrelated", state: "state-1", description_html: "<p>login page copy</p>" },
+  ];
+
+  async function runSearch(query: string): Promise<unknown[]> {
+    writeConfig();
+    process.argv = ["node", "plane"];
+    mockListFetch(issues);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(["list", "--search", query, "--json"], { from: "user" });
+    const first = String(log.mock.calls[0][0]);
+    // An empty result prints "No issues found." instead of a JSON array.
+    return first.startsWith("[") ? (JSON.parse(first) as unknown[]) : [];
+  }
+
+  it("matches titles case-insensitively", async () => {
+    const rows = (await runSearch("REDIRECT")) as Array<{ title: string }>;
+    expect(rows.map((r) => r.title)).toEqual(["Fix login redirect"]);
+  });
+
+  it("matches identifiers like ROADMAP-8", async () => {
+    const rows = (await runSearch("roadmap-8")) as Array<{ sequence: number }>;
+    expect(rows.map((r) => r.sequence)).toEqual([8]);
+  });
+
+  it("matches stripped description text, not HTML tags", async () => {
+    // "OAuth" appears in issue-1's description; "login" also appears in issue-3's description.
+    const oauthRows = (await runSearch("oauth")) as Array<{ title: string }>;
+    expect(oauthRows.map((r) => r.title)).toEqual(["Fix login redirect"]);
+    const loginRows = (await runSearch("LOGIN")) as Array<{ title: string }>;
+    expect(loginRows.map((r) => r.title)).toEqual(["Fix login redirect", "Unrelated"]);
+    // "<b>" must not match as a raw HTML tag — descriptions are stripped before matching.
+    expect(await runSearch("<b>")).toEqual([]);
+  });
+});
+
 describe("issue create --module / --cycle", () => {
   it("dry-run previews the create POST plus module and cycle membership POSTs", async () => {
     writeConfig();

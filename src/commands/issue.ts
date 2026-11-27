@@ -91,6 +91,10 @@ export function createIssueCommand(): Command {
       "Filter by assignee(s), comma-separated display names/emails or 'me'",
     )
     .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
+    .option(
+      "--search <query>",
+      "Filter by keyword in title, identifier, or description (case-insensitive)",
+    )
     .option("--json", "Output raw JSON")
     .option("--fields <names>", "Comma-separated fields for JSON output")
     .option(
@@ -105,6 +109,7 @@ export function createIssueCommand(): Command {
         priority?: string;
         assignee?: string;
         updatedSince?: string;
+        search?: string;
         json?: boolean;
         fields?: string;
         columns?: string;
@@ -154,6 +159,7 @@ export function createIssueCommand(): Command {
               .filter(Boolean),
             assigneeIds,
             updatedSince: opts.updatedSince,
+            search: opts.search,
             json: opts.json,
             fields: opts.fields,
             columns: opts.columns,
@@ -180,6 +186,10 @@ export function createIssueCommand(): Command {
       "Filter by priority, comma-separated: urgent | high | medium | low | none",
     )
     .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
+    .option(
+      "--search <query>",
+      "Filter by keyword in title, identifier, or description (case-insensitive)",
+    )
     .option("--json", "Output raw JSON")
     .option("--fields <names>", "Comma-separated fields for JSON output")
     .option(
@@ -193,6 +203,7 @@ export function createIssueCommand(): Command {
         state?: string;
         priority?: string;
         updatedSince?: string;
+        search?: string;
         json?: boolean;
         fields?: string;
         columns?: string;
@@ -228,6 +239,7 @@ export function createIssueCommand(): Command {
               .filter(Boolean),
             assigneeIds: [myId],
             updatedSince: opts.updatedSince,
+            search: opts.search,
             json: opts.json,
             fields: opts.fields,
             columns: opts.columns,
@@ -1297,6 +1309,7 @@ async function listIssuesCore(
     priorities?: string[];
     assigneeIds?: string[];
     updatedSince?: string;
+    search?: string;
     json?: boolean;
     fields?: string;
     columns?: string;
@@ -1354,6 +1367,20 @@ async function listIssuesCore(
       throw new ValidationError(`Invalid date "${opts.updatedSince}". Use YYYY-MM-DD format.`);
     }
     issues = issues.filter((issue) => new Date(issue.updated_at) >= since);
+  }
+
+  if (opts.search) {
+    const query = opts.search.toLowerCase();
+    issues = issues.filter((issue) => {
+      const haystack = [
+        issue.name ?? "",
+        `${identifier}-${issue.sequence_id}`,
+        stripHtml(issue.description_html ?? ""),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
   }
 
   if (issues.length === 0) {

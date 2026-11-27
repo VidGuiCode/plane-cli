@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `issue list` and `issue mine` accept `--search <query>` to filter by keyword in the title, identifier (e.g. `ROADMAP-42`), or stripped description, case-insensitively.
 - Structured JSON errors and failed batch rows include the command, retryability, and suggested remediation when available (`command`, `retryable`, `suggestedFix`).
 - `discover issue-inputs` advertises the batch surfaces in its `automation` block: `issue update --from-json`, `issue bulk-create --file`, missing-label options, and the description input flags.
 

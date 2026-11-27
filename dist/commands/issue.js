@@ -40,6 +40,7 @@ export function createIssueCommand() {
         .option("--priority <values>", "Filter by priority, comma-separated: urgent | high | medium | low | none")
         .option("--assignee <names>", "Filter by assignee(s), comma-separated display names/emails or 'me'")
         .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
+        .option("--search <query>", "Filter by keyword in title, identifier, or description (case-insensitive)")
         .option("--json", "Output raw JSON")
         .option("--fields <names>", "Comma-separated fields for JSON output")
         .option("--columns <list>", "Comma-separated columns for the table (id,title,state,priority,due,start,assignee,labels,uuid,created,updated)")
@@ -82,6 +83,7 @@ export function createIssueCommand() {
                     .filter(Boolean),
                 assigneeIds,
                 updatedSince: opts.updatedSince,
+                search: opts.search,
                 json: opts.json,
                 fields: opts.fields,
                 columns: opts.columns,
@@ -100,6 +102,7 @@ export function createIssueCommand() {
         .option("--state <names>", "Filter by state name(s), comma-separated")
         .option("--priority <values>", "Filter by priority, comma-separated: urgent | high | medium | low | none")
         .option("--updated-since <date>", "Filter issues updated on or after this date (YYYY-MM-DD)")
+        .option("--search <query>", "Filter by keyword in title, identifier, or description (case-insensitive)")
         .option("--json", "Output raw JSON")
         .option("--fields <names>", "Comma-separated fields for JSON output")
         .option("--columns <list>", "Comma-separated columns for the table (id,title,state,priority,due,start,assignee,labels,uuid,created,updated)")
@@ -132,6 +135,7 @@ export function createIssueCommand() {
                     .filter(Boolean),
                 assigneeIds: [myId],
                 updatedSince: opts.updatedSince,
+                search: opts.search,
                 json: opts.json,
                 fields: opts.fields,
                 columns: opts.columns,
@@ -939,6 +943,19 @@ async function listIssuesCore(client, ws, projectId, identifier, opts) {
             throw new ValidationError(`Invalid date "${opts.updatedSince}". Use YYYY-MM-DD format.`);
         }
         issues = issues.filter((issue) => new Date(issue.updated_at) >= since);
+    }
+    if (opts.search) {
+        const query = opts.search.toLowerCase();
+        issues = issues.filter((issue) => {
+            const haystack = [
+                issue.name ?? "",
+                `${identifier}-${issue.sequence_id}`,
+                stripHtml(issue.description_html ?? ""),
+            ]
+                .join(" ")
+                .toLowerCase();
+            return haystack.includes(query);
+        });
     }
     if (issues.length === 0) {
         printInfo("No issues found.");

@@ -128,6 +128,7 @@ export async function planIssueCreate(
     ...fields,
     description: undefined,
     descriptionFile: undefined,
+    descriptionMarkdown: undefined,
     descriptionHtml: fields.description === "" ? undefined : descriptionHtml,
   });
   if (fields.state !== undefined) {

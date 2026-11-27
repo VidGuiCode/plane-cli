@@ -1,21 +1,27 @@
 import { readFileSync } from "node:fs";
 import { getErrorMessage, ValidationError } from "./errors.js";
+import { markdownToHtml } from "./markdown.js";
 
 export interface IssueDescription {
   description?: string;
   descriptionHtml?: string;
   descriptionFile?: string;
+  descriptionMarkdown?: string;
 }
 
 export function readIssueDescription(fields: IssueDescription): string | undefined {
-  const { description, descriptionHtml, descriptionFile } = fields;
+  const { description, descriptionHtml, descriptionFile, descriptionMarkdown } = fields;
   if (
-    [description, descriptionHtml, descriptionFile].filter((value) => value !== undefined).length >
-    1
+    [description, descriptionHtml, descriptionFile, descriptionMarkdown].filter(
+      (value) => value !== undefined,
+    ).length > 1
   ) {
     throw new ValidationError(
-      "--description, --description-html, and --description-file are mutually exclusive.",
+      "--description, --description-html, --description-file, and --description-markdown are mutually exclusive.",
     );
+  }
+  if (descriptionMarkdown !== undefined) {
+    return descriptionMarkdown === "" ? "" : markdownToHtml(descriptionMarkdown);
   }
   if (descriptionFile === undefined) {
     return descriptionHtml ?? (description === undefined ? undefined : `<p>${description}</p>`);

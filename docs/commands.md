@@ -24,7 +24,7 @@ Standalone commands include `login`, `logout`, `profile`, `where`, `upgrade`, an
 
 Use `42` for an issue in the active project, `PROJ-42` to identify a project and sequence number, or a full issue UUID. If an imported project contains duplicate sequence numbers, use the UUID of the issue you intend to change.
 
-Commands that support multiple issue refs accept comma-separated values. For example, `plane issue update PROJ-42,PROJ-43 --priority high` applies the same update to both issues. To apply distinct changes, use [JSON batch updates](automation.md#update-issues-from-json).
+Commands that support multiple issue refs accept comma-separated values. For example, `plane issue update PROJ-42,PROJ-43 --priority high` applies the same update to both issues. To apply distinct changes, use [JSON batch updates](automation.md#update-issues-from-json). `module add` and `cycle add` also accept a repeatable `--issues <refs>` option instead of the positional list: `plane module add "Website Deployment" --issues ROADMAP-157,158`.
 
 Use `--columns` to choose table columns for `issue list` or `issue mine`. With `--json`, use `--fields` to select fields from `issue list`, `issue mine`, or `issue get`. Use `--search <query>` on `issue list` or `issue mine` to filter by keyword in the title, identifier (`PROJ-42`), or stripped description, case-insensitively. It combines with `--state`, `--priority`, `--assignee`, and `--updated-since`.
 
@@ -57,7 +57,9 @@ plane issue update PROJ-42 --parent none
 
 Use a parent issue ref to set a parent or `none` to clear it. When passing refs on the command line, change a parent on one issue at a time.
 
-Use `--description-file <path>` on issue creation or update to read a UTF-8 plain-text description and preserve its line breaks. Use `--description-file -` to read from stdin and pass `--title` when creating an issue this way. Choose one of `--description`, `--description-html`, and `--description-file`.
+Use `--description-file <path>` on issue creation or update to read a UTF-8 plain-text description and preserve its line breaks. Use `--description-file -` to read from stdin and pass `--title` when creating an issue this way. Choose one of `--description`, `--description-html`, `--description-file`, and `--description-markdown`.
+
+`--description-markdown <markdown>` converts a Markdown subset (headings, lists, bold/italic, inline code, links, blockquotes, fenced code) to HTML before sending; raw HTML in the input is escaped. Use `issue get --markdown` to read a stored description back as Markdown.
 
 ```bash
 plane issue create --title "Release plan" --description-file plan.txt

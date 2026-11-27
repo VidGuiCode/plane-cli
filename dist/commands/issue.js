@@ -7,6 +7,7 @@ import { ask } from "../core/prompt.js";
 import { exitWithError, ValidationError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { stripHtml } from "../core/html.js";
+import { htmlToMarkdown } from "../core/markdown.js";
 import { readIssueDescription } from "../core/issue-description.js";
 import { executeIssueCreate, planIssueCreate, previewIssueCreate, validateCreateOptions, } from "../core/issue-create.js";
 import { createIssueBatch, readIssueCreateBatch } from "../core/issue-create-batch.js";
@@ -165,6 +166,7 @@ export function createIssueCommand() {
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
         .option("--json", "Output raw JSON")
         .option("--fields <names>", "Comma-separated fields for JSON output")
+        .option("--markdown", "Render the description as Markdown in text output")
         .action(async (issueRef, opts) => {
         try {
             const config = loadConfig();
@@ -198,7 +200,10 @@ export function createIssueCommand() {
             printInfo(`${identifier}-${issue.sequence_id}  ${issue.name}`);
             printInfo(`State:       ${resolveState(issue, stateMap)}`);
             printInfo(`Priority:    ${issue.priority ?? "-"}`);
-            if (issue.description_html) {
+            if (opts.markdown && issue.description_html) {
+                printInfo(`Description (markdown):\n${htmlToMarkdown(issue.description_html)}`);
+            }
+            else if (issue.description_html) {
                 const text = stripHtml(issue.description_html);
                 printInfo(`Description: ${text || "-"}`);
             }
@@ -237,6 +242,7 @@ export function createIssueCommand() {
         .option("--description <description>", "Issue description")
         .option("--description-html <html>", "Raw HTML description (exclusive with --description)")
         .option("--description-file <path|->", "Read a plain-text description from a file or stdin")
+        .option("--description-markdown <markdown>", "Markdown description, converted to HTML (exclusive with the other --description-* flags)")
         .option("--state <state>", "State name or ID")
         .option("--create-labels", "Create missing named labels")
         .option("--ignore-missing-labels", "Skip missing named labels")
@@ -281,6 +287,7 @@ export function createIssueCommand() {
                 description: undefined,
                 descriptionHtml: description,
                 descriptionFile: undefined,
+                descriptionMarkdown: undefined,
             }, opts, Boolean(opts.validateOnly));
             const dryRun = isDryRunEnabled();
             if (dryRun || opts.validateOnly) {
@@ -375,6 +382,7 @@ export function createIssueCommand() {
         .option("--description <description>", "New description")
         .option("--description-html <html>", "Raw HTML description (exclusive with --description)")
         .option("--description-file <path|->", "Read a plain-text description from a file or stdin")
+        .option("--description-markdown <markdown>", "Markdown description, converted to HTML (exclusive with the other --description-* flags)")
         .option("--priority <priority>", "Priority: urgent | high | medium | low | none")
         .option("--state <state>", "State name or ID")
         .option("--assignee <name>", "Assignee display name or email (repeatable)", collect, [])
@@ -454,6 +462,7 @@ export function createIssueCommand() {
                 description: undefined,
                 descriptionHtml,
                 descriptionFile: undefined,
+                descriptionMarkdown: undefined,
             });
             // Resolve state and labels per unique project (handles cross-project bulk)
             const uniqueProjectIds = [...new Set(resolved.map((r) => r.projectId))];
@@ -479,7 +488,7 @@ export function createIssueCommand() {
                 !opts.state &&
                 opts.label.length === 0 &&
                 opts.labelId.length === 0) {
-                throw new ValidationError("Nothing to update. Use --title (or --name), --description, --description-html, --description-file, --priority, --state, --assignee, --label, --label-id, --parent, --due, or --start.");
+                throw new ValidationError("Nothing to update. Use --title (or --name), --description, --description-html, --description-file, --description-markdown, --priority, --state, --assignee, --label, --label-id, --parent, --due, or --start.");
             }
             // Dry-run: print all payloads and exit
             if (isDryRunEnabled()) {

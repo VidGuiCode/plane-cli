@@ -841,6 +841,37 @@ describe("issue creation preflight and import", () => {
     }
   });
 
+  it.each(["create", "update"])("converts --description-markdown on issue %s", async (verb) => {
+    writeConfig();
+    mockListFetch([issue()]);
+    process.argv = ["node", "plane", "--dry-run"];
+    vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const args = verb === "create" ? ["create", "--title", "New issue"] : ["update", "1"];
+    await createIssueCommand().parseAsync(
+      [...args, "--description-markdown", "# Plan\n\n- **ship** it\n- run tests"],
+      { from: "user" },
+    );
+    expect(JSON.parse(log.mock.calls[0][0] as string).body.description_html).toBe(
+      "<h1>Plan</h1><ul><li><strong>ship</strong> it</li><li>run tests</li></ul>",
+    );
+  });
+
+  it("rejects --description combined with --description-markdown", async () => {
+    writeConfig();
+    mockListFetch([issue()]);
+    process.argv = ["node", "plane", "--dry-run"];
+    vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await createIssueCommand().parseAsync(
+      ["update", "1", "--description", "plain", "--description-markdown", "# md"],
+      { from: "user" },
+    );
+    expect(process.exitCode).not.toBe(0);
+    expect(String(errSpy.mock.calls[0]?.[0])).toContain("mutually exclusive");
+    process.exitCode = undefined;
+  });
+
   it("previews YAML, relative description files and deduplicated labels without writes", async () => {
     writeConfig();
     process.argv = ["node", "plane", "--dry-run"];

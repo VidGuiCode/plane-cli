@@ -18,6 +18,7 @@ const stringFields = [
   "name",
   "description",
   "descriptionHtml",
+  "descriptionMarkdown",
   "priority",
   "state",
   "parent",
@@ -184,8 +185,15 @@ export async function updateIssueBatch(
     }
 
     try {
-      if (entry.description !== undefined && entry.descriptionHtml !== undefined) {
-        throw new ValidationError("description and descriptionHtml are mutually exclusive.");
+      const descriptionInputs = [
+        entry.description,
+        entry.descriptionHtml,
+        entry.descriptionMarkdown,
+      ].filter((value) => value !== undefined);
+      if (descriptionInputs.length > 1) {
+        throw new ValidationError(
+          "description, descriptionHtml, and descriptionMarkdown are mutually exclusive.",
+        );
       }
       const labelIds = entry.labelId ?? [];
       validateIssueUpdateLabelIds(labelIds);

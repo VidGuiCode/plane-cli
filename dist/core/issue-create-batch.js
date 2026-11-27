@@ -9,6 +9,7 @@ const strings = [
     "description",
     "descriptionHtml",
     "descriptionFile",
+    "descriptionMarkdown",
     "priority",
     "state",
     "parent",
@@ -56,7 +57,7 @@ function readRow(entry, baseDir) {
         if (!Object.hasOwn(row, field))
             continue;
         const value = row[field];
-        const allowEmpty = field === "description" || field === "descriptionHtml";
+        const allowEmpty = field === "description" || field === "descriptionHtml" || field === "descriptionMarkdown";
         if (typeof value !== "string" || (!allowEmpty && !value.trim())) {
             throw new ValidationError(`Field "${field}" must be ${allowEmpty ? "a" : "a non-empty"} string.`);
         }

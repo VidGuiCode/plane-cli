@@ -173,6 +173,39 @@ describe("cycle command", () => {
     });
   });
 
+  it("accepts repeated --issues instead of the positional refs", async () => {
+    writeConfig();
+    process.argv = ["node", "plane", "--dry-run"];
+    mockFetch((url) => {
+      if (url.includes("/issues/")) {
+        return {
+          results: [
+            { id: "issue-1", sequence_id: 157 },
+            { id: "issue-2", sequence_id: 158 },
+          ],
+        };
+      }
+      if (url.includes("/cycles/")) {
+        return { results: [{ id: "cycle-1", name: "Sprint 1" }] };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await createCycleCommand().parseAsync(
+      ["add", "Sprint 1", "--issues", "157,158", "--issues", "158", "--json"],
+      { from: "user" },
+    );
+
+    const dryRun = JSON.parse(log.mock.calls[0][0] as string) as { body: { issues: string[] } };
+    expect(dryRun).toMatchObject({
+      dryRun: true,
+      method: "POST",
+      path: "workspaces/workspace/projects/project-123/cycles/cycle-1/cycle-issues/",
+      body: { issues: ["issue-1", "issue-2"] },
+    });
+  });
+
   it("lists cycle issues from the cycle-issues endpoint", async () => {
     writeConfig();
     process.argv = ["node", "plane"];

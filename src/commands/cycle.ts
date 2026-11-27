@@ -48,6 +48,11 @@ function splitIssueRefs(issueRefs: string): string[] {
   return refs;
 }
 
+/** Commander collector for repeatable options like `--issues <refs>`. */
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 function cycleIssuesPath(ws: string, projectId: string, cycleId: string): string {
   return `workspaces/${ws}/projects/${projectId}/cycles/${cycleId}/cycle-issues/`;
 }
@@ -252,19 +257,27 @@ export function createCycleCommand(): Command {
   // ── add ───────────────────────────────────────────────────────────────────
 
   command
-    .command("add <issues> <cycle>")
-    .description("Add one or more issues to a cycle. Issues: 42, PROJ-42, UUID, or comma-separated")
+    .command("add [issues] [cycle]")
+    .description(
+      "Add issues to a cycle: `add <issues> <cycle>`, or `add <cycle> --issues <refs>` (refs comma-separated, repeatable)",
+    )
     .option("--workspace <slug>", "Workspace slug (overrides active context)")
     .option(
       "--project <identifier-or-name>",
       "Project identifier or name (overrides active context)",
     )
+    .option(
+      "--issues <refs>",
+      "Issue refs (comma-separated; repeatable) as an alternative to the positional argument",
+      collect,
+      [],
+    )
     .option("--json", "Output raw JSON")
     .action(
       async (
-        issueRef: string,
-        cycleRef: string,
-        opts: { workspace?: string; project?: string; json?: boolean },
+        issueArg: string | undefined,
+        cycleArg: string | undefined,
+        opts: { workspace?: string; project?: string; issues?: string[]; json?: boolean },
       ) => {
         try {
           const config = loadConfig();
@@ -283,8 +296,27 @@ export function createCycleCommand(): Command {
             activeProjectIdentifier = config.context.activeProjectIdentifier;
           }
 
+          // With `--issues` given and a single positional, the positional is the cycle:
+          // `add "Sprint 1" --issues 157,158`.
+          let cycleRef = cycleArg;
+          let issueRefs = issueArg;
+          if (cycleRef === undefined && issueArg !== undefined && (opts.issues ?? []).length > 0) {
+            cycleRef = issueArg;
+            issueRefs = undefined;
+          }
+          if (!cycleRef) {
+            throw new ValidationError("Provide a cycle name: add <issues> <cycle>.");
+          }
+          const refs = [
+            ...(issueRefs ? splitIssueRefs(issueRefs) : []),
+            ...(opts.issues ?? []).flatMap((value) => splitIssueRefs(value)),
+          ];
+          if (refs.length === 0) {
+            throw new ValidationError("Provide issue refs as an argument or via --issues <refs>.");
+          }
+
           const resolvedIssues = [];
-          for (const ref of splitIssueRefs(issueRef)) {
+          for (const ref of refs) {
             resolvedIssues.push(
               await resolveIssueRef(
                 client,
@@ -301,7 +333,7 @@ export function createCycleCommand(): Command {
           if (mismatched) {
             throw new Error("All issue refs must belong to the same project for cycle assignment.");
           }
-          const issueIds = resolvedIssues.map((issue) => issue.issueId);
+          const issueIds = [...new Set(resolvedIssues.map((issue) => issue.issueId))];
           const cycle = await resolveCycle(client, ws, projectId, cycleRef);
 
           const path = cycleIssuesPath(ws, projectId, cycle.id);

@@ -209,11 +209,13 @@ export function createDiscoverCommand() {
                             command: "plane module add <issues> <module>",
                             issueRefs: "comma-separated sequence, project-sequence, or UUID refs",
                             module: "module id or name",
+                            alternative: "plane module add <module> --issues <refs> (repeatable)",
                         },
                         cycle: {
                             command: "plane cycle add <issues> <cycle>",
                             issueRefs: "comma-separated sequence, project-sequence, or UUID refs",
                             cycle: "cycle id or name",
+                            alternative: "plane cycle add <cycle> --issues <refs> (repeatable)",
                         },
                     },
                     batchUpdate: {

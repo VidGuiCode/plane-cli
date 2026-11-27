@@ -70,6 +70,7 @@ export async function planIssueCreate(client, context, style, fields, options, s
         ...fields,
         description: undefined,
         descriptionFile: undefined,
+        descriptionMarkdown: undefined,
         descriptionHtml: fields.description === "" ? undefined : descriptionHtml,
     });
     if (fields.state !== undefined) {

@@ -66,7 +66,7 @@ Pass `--from-json -` to read from stdin. Use `--workspace` and `--project` to se
 | --- | --- |
 | `issue` | Required. One issue ref as a string, such as `"PROJ-42"`, `"42"`, or a UUID. |
 | `title`, `name` | Replacement title. `title` takes precedence. |
-| `description`, `descriptionHtml` | Plain text or raw HTML. Use one field and pass `""` to clear it. |
+| `description`, `descriptionHtml`, `descriptionMarkdown` | Plain text, raw HTML, or Markdown (converted to HTML). Use one field and pass `""` to clear it. |
 | `priority` | `urgent`, `high`, `medium`, `low`, or `none`. |
 | `state` | State name or ID in the issue's project. |
 | `assignee` | Array of assignee names, emails, or `me`. |
@@ -105,7 +105,7 @@ plane issue bulk-create --project PROJ --file issues.yaml --create-labels --json
 | Field | Value |
 | --- | --- |
 | `title` | Required nonblank string. |
-| `description`, `descriptionHtml`, `descriptionFile` | Choose one of inline text, raw HTML, and a UTF-8 plain-text file. Relative file paths are based on the spec file's directory, or the current directory for specs from stdin. |
+| `description`, `descriptionHtml`, `descriptionFile`, `descriptionMarkdown` | Choose one of inline text, raw HTML, a UTF-8 plain-text file, and Markdown (converted to HTML). Relative file paths are based on the spec file's directory, or the current directory for specs from stdin. |
 | `priority` | `urgent`, `high`, `medium`, `low`, or `none`. |
 | `state` | State name or ID in the selected project. |
 | `assignee` | Array of workspace member names, emails, or `me`. |

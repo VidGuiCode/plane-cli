@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `module add` and `cycle add` accept a repeatable `--issues <refs>` option (comma-separated) as an alternative to the positional issue list: `plane module add "Website Deployment" --issues ROADMAP-157,158`.
+- Markdown descriptions: `--description-markdown <markdown>` on `issue create`/`update` (and `descriptionMarkdown` in bulk specs) converts a safe Markdown subset to HTML; `issue get --markdown` renders the stored description back as Markdown.
 - `issue list` and `issue mine` accept `--project ALL` to list issues across every project in the workspace in one call, with all existing filters (`--search`, `--state`, `--priority`, `--assignee`, `--updated-since`, `--fields`, `--columns`) applied per project.
 - `issue list` and `issue mine` accept `--search <query>` to filter by keyword in the title, identifier (e.g. `ROADMAP-42`), or stripped description, case-insensitively.
 - Structured JSON errors and failed batch rows include the command, retryability, and suggested remediation when available (`command`, `retryable`, `suggestedFix`).

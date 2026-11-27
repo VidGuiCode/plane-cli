@@ -39,6 +39,10 @@ function splitIssueRefs(issueRefs) {
     }
     return refs;
 }
+/** Commander collector for repeatable options like `--issues <refs>`. */
+function collect(value, previous) {
+    return [...previous, value];
+}
 export function createModuleCommand() {
     const command = new Command("module")
         .description("Work with Plane modules")
@@ -243,12 +247,13 @@ export function createModuleCommand() {
         }
     });
     command
-        .command("add <issues> <module>")
-        .description("Add one or more issues to a module. Issues: 42, PROJ-42, UUID, or comma-separated")
+        .command("add [issues] [module]")
+        .description("Add issues to a module: `add <issues> <module>`, or `add <module> --issues <refs>` (refs comma-separated, repeatable)")
         .option("--workspace <slug>", "Workspace slug (overrides active context)")
         .option("--project <identifier-or-name>", "Project identifier or name (overrides active context)")
+        .option("--issues <refs>", "Issue refs (comma-separated; repeatable) as an alternative to the positional argument", collect, [])
         .option("--json", "Output raw JSON")
-        .action(async (issueRef, moduleRef, opts) => {
+        .action(async (issueArg, moduleArg, opts) => {
         try {
             const config = loadConfig();
             const client = createClient(config);
@@ -265,8 +270,26 @@ export function createModuleCommand() {
                 activeProjectId = config.context.activeProject;
                 activeProjectIdentifier = config.context.activeProjectIdentifier;
             }
+            // With `--issues` given and a single positional, the positional is the module:
+            // `add "Website Deployment" --issues 157,158`.
+            let moduleRef = moduleArg;
+            let issueRefs = issueArg;
+            if (moduleRef === undefined && issueArg !== undefined && (opts.issues ?? []).length > 0) {
+                moduleRef = issueArg;
+                issueRefs = undefined;
+            }
+            if (!moduleRef) {
+                throw new ValidationError("Provide a module name: add <issues> <module>.");
+            }
+            const refs = [
+                ...(issueRefs ? splitIssueRefs(issueRefs) : []),
+                ...(opts.issues ?? []).flatMap((value) => splitIssueRefs(value)),
+            ];
+            if (refs.length === 0) {
+                throw new ValidationError("Provide issue refs as an argument or via --issues <refs>.");
+            }
             const resolvedIssues = [];
-            for (const ref of splitIssueRefs(issueRef)) {
+            for (const ref of refs) {
                 resolvedIssues.push(await resolveIssueRef(client, ws, activeProjectId, activeProjectIdentifier, style, ref));
             }
             const projectId = resolvedIssues[0].projectId;
@@ -274,7 +297,7 @@ export function createModuleCommand() {
             if (mismatched) {
                 throw new Error("All issue refs must belong to the same project for module assignment.");
             }
-            const issueIds = resolvedIssues.map((issue) => issue.issueId);
+            const issueIds = [...new Set(resolvedIssues.map((issue) => issue.issueId))];
             const mod = await resolveModule(client, ws, projectId, moduleRef);
             const path = `workspaces/${ws}/projects/${projectId}/modules/${mod.id}/module-issues/`;
             const body = { issues: issueIds };
